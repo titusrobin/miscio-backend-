@@ -2,6 +2,9 @@
 from typing import Optional, Dict, Any
 import httpx
 from app.core.config import settings
+import logging 
+logger = logging.getLogger(__name__)
+
 
 
 class BaseAPIService:
@@ -29,26 +32,30 @@ class BaseAPIService:
             await self._client.aclose()
 
     async def make_request(
-        self,
-        method: str,
-        url: str,
-        headers: Dict[str, str],
-        data: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+    self,
+    method: str,
+    url: str,
+    headers: Dict[str, str],
+    data: Optional[Dict[str, Any]] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
         """
         Makes an HTTP request with proper error handling and logging.
         """
         client = await self.get_client()
         try:
             response = await client.request(
-                method=method, url=url, headers=headers, json=data, params=params
+                method=method,
+                url=url,
+                headers=headers,
+                json=data,  # httpx uses 'json' parameter to automatically handle JSON encoding
+                params=params
             )
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
-            print(f"HTTP Error: {e.response.status_code} - {e.response.text}")
+            logger.error(f"HTTP Error: {e.response.status_code} - {e.response.text}")
             raise
         except Exception as e:
-            print(f"Request Error: {str(e)}")
+            logger.error(f"Request Error: {str(e)}")
             raise
