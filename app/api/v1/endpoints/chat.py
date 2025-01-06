@@ -83,6 +83,28 @@ async def handle_tool_calls(
 
     return tool_outputs
 
+@router.get("/history/{thread_id}")
+async def get_chat_history(
+    thread_id: str,
+    current_admin: Admin = Depends(get_current_admin_user),
+):
+    """
+    Retrieve chat history for a specific thread.
+    """
+    try:
+        chat_history = await db.db.admin_chats.find_one({"thread_id": thread_id})
+        if not chat_history:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Chat history not found"
+            )
+        return chat_history["messages"]
+    except Exception as e:
+        logger.error(f"Error retrieving chat history: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve chat history",
+        )
+
 
 @router.post("/message")
 async def process_message(
