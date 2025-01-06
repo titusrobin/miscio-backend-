@@ -1,0 +1,29 @@
+# Environment and secrets
+.env
+service.yaml
+*.local
+
+# Python cache files - these are generated automatically and shouldn't be in version control
+__pycache__/
+*.py[cod]
+*.so
+
+# System files - these are specific to your operating system and shouldn't be shared
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python virtual environment
+venv/
+env/
+ENV/

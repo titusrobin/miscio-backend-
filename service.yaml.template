@@ -1,0 +1,15 @@
+version: '1.0'
+services:
+  app:
+    environment:
+      # OpenAI Configuration
+      - OPENAI_API_KEY=<your_openai_api_key>
+      
+      # Twilio Configuration
+      - TWILIO_ACCOUNT_SID=<your_twilio_sid>
+      - TWILIO_AUTH_TOKEN=<your_twilio_token>
+      - TWILIO_WHATSAPP_NUMBER=<your_twilio_whatsapp_number>
+      
+      # Other configuration
+      - MONGODB_URL=<your_mongodb_url>
+      # Add other environment variables as needed
