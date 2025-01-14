@@ -1,0 +1,27 @@
+# Core Framework
+fastapi==0.109.0
+uvicorn==0.27.0
+
+# Database
+motor==3.3.2  # MongoDB async driver
+pymongo==4.6.1  # Required by motor
+
+# Authentication and Security
+python-jose[cryptography]==3.3.0  # For JWT tokens
+passlib[bcrypt]==1.7.4  # For password hashing
+python-multipart==0.0.6  # For handling form data
+
+# Configuration and Environment
+pydantic==2.5.3  # For data validation
+pydantic-settings==2.1.0  # For settings management
+python-dotenv==1.0.0  # For .env file handling
+email-validator==2.1.1
+
+
+
+# External Services
+twilio==8.10.0  # For WhatsApp integration
+httpx==0.26.0  # For async HTTP requests
+
+# Utilities
+python-dateutil==2.8.2  # For date handling

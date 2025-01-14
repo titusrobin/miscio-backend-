@@ -52,19 +52,20 @@ class CampaignService:
                     campaign_data["id"] = str(result.inserted_id)
 
                     # Get all active students
-                    students = await self.db.students.find(
-                        {"status": "active"}, session=session
-                    ).to_list(length=None)
+                    students = await self.db.students.find({}, session=session).to_list(length=None)
+                    logger.info(f"Found {len(students)} active students")
 
                     # Start student outreach
                     for student in students:
                         try:
                             initial_message = f"Hi {student['first_name']}, {campaign}"
+                            logger.debug(f"Sending message to student {student['_id']}: {initial_message}")
                             await self.twilio_service.send_message(
                                 student["phone"], initial_message
                             )
 
                             # Record the outreach
+                            logger.debug(f"Recording outreach for student {student['_id']}")
                             await self.db.interactions.insert_one(
                                 {
                                     "campaign_id": str(result.inserted_id),

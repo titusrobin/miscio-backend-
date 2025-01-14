@@ -1,0 +1,75 @@
+{
+    "family": "miscio-backend",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": ["FARGATE"],
+    "cpu": "1024",
+    "memory": "2048",
+    "executionRoleArn": "arn:aws:iam::440744233765:role/ecsTaskExecutionRole",
+    "taskRoleArn": "arn:aws:iam::440744233765:role/ecsTaskRole",
+    "containerDefinitions": [
+        {
+            "name": "miscio-app",
+            "image": "440744233765.dkr.ecr.us-east-1.amazonaws.com/miscio-backend:latest",
+            "essential": true,
+            "portMappings": [
+                {
+                    "containerPort": 8000,
+                    "hostPort": 8000,
+                    "protocol": "tcp"
+                }
+            ],
+            "environment": [
+                {
+                    "name": "PYTHONUNBUFFERED",
+                    "value": "1"
+                },
+                {
+                    "name": "HOST",
+                    "value": "0.0.0.0"
+                },
+                {
+                    "name": "PORT",
+                    "value": "8000"
+                }
+            ],
+            "healthCheck": {
+                "command": ["CMD", "python", "-c", "import http.client; conn = http.client.HTTPConnection('localhost:8000'); conn.request('GET', '/health'); response = conn.getresponse(); exit(0 if response.status == 200 else 1)"],
+                "interval": 30,
+                "timeout": 5,
+                "retries": 3,
+                "startPeriod": 60
+            },
+            "secrets": [
+                {
+                    "name": "MONGODB_URL",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/MONGODB_URL"
+                },
+                {
+                    "name": "OPENAI_API_KEY",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/OPENAI_API_KEY"
+                },
+                {
+                    "name": "TWILIO_ACCOUNT_SID",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/TWILIO_ACCOUNT_SID"
+                },
+                {
+                    "name": "TWILIO_AUTH_TOKEN",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/TWILIO_AUTH_TOKEN"
+                },
+                {
+                    "name": "SECRET_KEY",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/SECRET_KEY"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/miscio-backend",
+                    "awslogs-region": "us-east-1",
+                    "awslogs-stream-prefix": "ecs",
+                    "awslogs-create-group": "true"
+                }
+            }
+        }
+    ]
+}

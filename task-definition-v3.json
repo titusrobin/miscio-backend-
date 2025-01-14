@@ -1,0 +1,66 @@
+{
+    "family": "miscio-backend",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": ["FARGATE"],
+    "cpu": "1024",
+    "memory": "2048",
+    "executionRoleArn": "arn:aws:iam::440744233765:role/ecsTaskExecutionRole",
+    "containerDefinitions": [
+        {
+            "name": "miscio-app",
+            "image": "440744233765.dkr.ecr.us-east-1.amazonaws.com/miscio-backend:latest",
+            "essential": true,
+            "portMappings": [
+                {
+                    "containerPort": 8000,
+                    "hostPort": 8000,
+                    "protocol": "tcp"
+                }
+            ],
+            "environment": [
+                {
+                    "name": "PYTHONUNBUFFERED",
+                    "value": "1"
+                }
+            ],
+            "secrets": [
+                {
+                    "name": "MONGODB_URL",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/MONGODB_URL"
+                },
+                {
+                    "name": "OPENAI_API_KEY",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/OPENAI_API_KEY"
+                },
+                {
+                    "name": "TWILIO_ACCOUNT_SID",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/TWILIO_ACCOUNT_SID"
+                },
+                {
+                    "name": "TWILIO_AUTH_TOKEN",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/TWILIO_AUTH_TOKEN"
+                },
+                {
+                    "name": "SECRET_KEY",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/SECRET_KEY"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/miscio-backend",
+                    "awslogs-region": "us-east-1",
+                    "awslogs-stream-prefix": "ecs",
+                    "awslogs-create-group": "true"
+                }
+            },
+            "healthCheck": {
+                "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
+                "interval": 30,
+                "timeout": 5,
+                "retries": 3,
+                "startPeriod": 60
+            }
+        }
+    ]
+}
