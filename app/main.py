@@ -2,14 +2,18 @@
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# config settings:
 from app.core.config import settings
 from app.db.mongodb import db
+
+# organizing api endpoints:
 from app.api.v1.api import router as api_router
 from app.api.v1.endpoints.auth import router as auth_router
-from app.api.v1.endpoints.chat import router as chat_router  # Import the chat router
+from app.api.v1.endpoints.chat import router as chat_router
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO)  # basic logging config level
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -18,30 +22,34 @@ app = FastAPI(
     description=settings.DESCRIPTION,
 )
 
-# CORS middleware
+# CORS middleware: security to control which origins/domains can access the API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:3001",
-        "https://miscio-frontend.vercel.app"
+        "https://miscio-frontend.vercel.app",
+        "https://api.miscioapp.com",
+        "https://miscio-frontend-git-main-your-username.vercel.app",
+        "https://miscio-frontend-*.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# recreate service?
+# ngx?
+
 
 # Events and resource management
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Starting up the application")
     await db.connect_to_database()
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("Shutting down the application")
     await db.close_database_connection()
 
 
