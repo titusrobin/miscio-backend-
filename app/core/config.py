@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
      # SendGrid Configuration
     SENDGRID_API_KEY: str
-    SENDGRID_FROM_EMAIL: str
+    SENDGRID_FROM_EMAIL: str = "robin@miscio.io"
     SENDGRID_FROM_NAME: str = "Miscio Assistant"
 
     # CORS
