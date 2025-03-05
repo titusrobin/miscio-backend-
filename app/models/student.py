@@ -10,7 +10,8 @@ class Student(BaseModel):
     id: str = Field(default_factory=lambda: str(ObjectId()))
     first_name: str
     last_name: str
-    phone: str
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow
-    )  # TODO - need? Does not exist
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    preferred_contact_method: str = "whatsapp"  # Default to WhatsApp
+    status: str = "active"
+    created_at: datetime = Field(default_factory=datetime.utcnow)

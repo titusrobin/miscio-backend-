@@ -22,6 +22,7 @@ email-validator==2.1.1
 # External Services
 twilio==8.10.0  # For WhatsApp integration
 httpx==0.26.0  # For async HTTP requests
+sendgrid==6.10.0  # For email integration
 
 # Utilities
 python-dateutil==2.8.2  # For date handling

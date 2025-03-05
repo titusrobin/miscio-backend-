@@ -5,6 +5,8 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException, status
 from .openai_service import OpenAIService
 from .twilio_service import TwilioService
+from app.services.sendgrid_service import SendGridService  # Add this import
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,7 @@ class CampaignService:
     ):
         self.openai_service = openai_service
         self.twilio_service = twilio_service
+        self.sendgrid_service = SendGridService()
         self.db = database
 
     async def create_campaign(self, campaign: str, admin_id: str) -> Dict:
@@ -59,29 +62,44 @@ class CampaignService:
                     for student in students:
                         try:
                             initial_message = f"Hi {student['first_name']}, {campaign}"
-                            logger.debug(f"Sending message to student {student['_id']}: {initial_message}")
-                            await self.twilio_service.send_message(
-                                student["phone"], initial_message
-                            )
+                            logger.debug(f"Processing student {student['_id']}")
+                            
+                            # Determine if we should use email or WhatsApp based on student data
+                            if 'email' in student and student.get('preferred_contact_method') == 'email':
+                                # Send via email
+                                logger.debug(f"Sending email to student {student['_id']}")
+                                await self.sendgrid_service.send_message(
+                                    to_email=student["email"],
+                                    subject="Message from Miscio Assistant",
+                                    message=initial_message
+                                )
+                                contact_method = "email"
+                            elif 'phone' in student:
+                                # Send via WhatsApp (existing functionality)
+                                logger.debug(f"Sending WhatsApp to student {student['_id']}")
+                                await self.twilio_service.send_message(
+                                    student["phone"], initial_message
+                                )
+                                contact_method = "whatsapp"
+                            else:
+                                logger.warning(f"No valid contact method for student {student['_id']}")
+                                continue
 
                             # Record the outreach
-                            logger.debug(f"Recording outreach for student {student['_id']}")
                             await self.db.interactions.insert_one(
                                 {
                                     "campaign_id": str(result.inserted_id),
                                     "student_id": str(student["_id"]),
                                     "message": initial_message,
                                     "type": "initial",
+                                    "contact_method": contact_method,
                                     "status": "sent",
                                     "timestamp": datetime.utcnow(),
                                 },
                                 session=session,
                             )
-
                         except Exception as e:
-                            logger.error(
-                                f"Error processing student {student['_id']}: {str(e)}"
-                            )
+                            logger.error(f"Error processing student {student['_id']}: {str(e)}")
                             continue
 
                     return campaign_data

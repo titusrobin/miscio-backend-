@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str
     TWILIO_WHATSAPP_NUMBER: str = "whatsapp:+14155238886"
 
+     # SendGrid Configuration
+    SENDGRID_API_KEY: str
+    SENDGRID_FROM_EMAIL: str
+    SENDGRID_FROM_NAME: str = "Miscio Assistant"
+
     # CORS
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
 

@@ -59,6 +59,18 @@
                 {
                     "name": "SECRET_KEY",
                     "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/SECRET_KEY"
+                },
+                {
+                    "name": "SENDGRID_API_KEY",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/SENDGRID_API_KEY"
+                },
+                {
+                    "name": "SENDGRID_FROM_EMAIL",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/SENDGRID_FROM_EMAIL"
+                },
+                {
+                    "name": "SENDGRID_FROM_NAME",
+                    "valueFrom": "arn:aws:ssm:us-east-1:440744233765:parameter/miscio/SENDGRID_FROM_NAME"
                 }
             ],
             "logConfiguration": {
