@@ -10,7 +10,6 @@ env:
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
   ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
   ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
-  ECS_TASK_DEFINITION: ${{ secrets.ECS_TASK_DEFINITION }}
   CONTAINER_NAME: ${{ secrets.CONTAINER_NAME }}
 
 jobs:
@@ -48,9 +47,17 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-    - name: Download task definition
+    - name: Prepare task definition
       run: |
-        aws ecs describe-task-definition --task-definition ${{ env.ECS_TASK_DEFINITION }} --query taskDefinition > task-definition.json
+        # Use our local task definition instead of downloading from ECS
+        echo "Using local task definition file..."
+        if [ -f "task-definition-v5.json" ]; then
+          echo "Found task-definition-v5.json, using it as task definition"
+          cp task-definition-v5.json task-definition.json
+        else
+          echo "WARNING: task-definition-v5.json not found, please make sure it exists in your repository"
+          ls -la *.json
+        fi
 
     - name: Fill in the new image ID in the Amazon ECS task definition
       id: task-def
