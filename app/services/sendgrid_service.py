@@ -44,7 +44,7 @@ class SendGridService:
             )
             
             # Set the Reply-To header to reply@miscioapp.com
-            mail.reply_to = Email("reply@miscioapp.com", "Miscio Assistant")
+            mail.reply_to = Email("reply@reply.miscioapp.com", "Miscio Assistant")
             
             # Send the email
             sg = SendGridAPIClient(self.api_key)
