@@ -127,17 +127,35 @@ async def handle_email_webhook(
         
         # Parse the incoming SendGrid webhook form data
         form_data = await request.form()
-        logger.info(f"Parsed form data: {form_data}")
+        logger.info(f"Parsed form data keys: {list(form_data.keys())}")
         
         # Extract email information from SendGrid's Parse Webhook
+        # According to SendGrid docs, these are the standard field names
         from_email = form_data.get("from")
         subject = form_data.get("subject", "")
         text_content = form_data.get("text", "")
         
+        # Fallback to alternate field names if primary fields are empty
+        if not from_email and "envelope" in form_data:
+            try:
+                import json
+                envelope = json.loads(form_data["envelope"])
+                from_email = envelope.get("from")
+                logger.info(f"Extracted from_email from envelope: {from_email}")
+            except Exception as e:
+                logger.warning(f"Failed to parse envelope JSON: {str(e)}")
+        
+        if not text_content:
+            text_content = form_data.get("body-plain", "") or form_data.get("plain", "")
+        
         logger.info(f"Extracted email details - From: {from_email}, Subject: {subject}")
+        logger.info(f"Text content first 100 chars: {text_content[:100] if text_content else ''}")
         
         if not from_email or not text_content:
             logger.error("Missing required email fields")
+            # Log all available fields for debugging
+            for key in form_data.keys():
+                logger.info(f"Available field: {key}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid email payload format",
@@ -145,8 +163,8 @@ async def handle_email_webhook(
 
         # Extract just the email address from the "from" field
         email_address = from_email
-        if "<" in from_email and ">" in from_email:
-            email_address = from_email.split("<")[1].split(">")[0]
+        if email_address and "<" in str(email_address) and ">" in str(email_address):
+            email_address = str(email_address).split("<")[1].split(">")[0]
         
         logger.info(f"Looking up student with email: {email_address}")    
         # Find student with error handling
@@ -205,6 +223,17 @@ async def handle_email_webhook(
                 logger.info(f"Updated campaign with assistant_id: {assistant_id}")
             else:
                 assistant_id = campaign["assistant_id"]
+
+            # Add context to help the OpenAI assistant understand this is a student reply
+            enriched_message = f"""
+            This is a reply from a student named {student.get('first_name')} {student.get('last_name')} 
+            to our campaign about: {campaign.get('description')}
+
+            Student's message:
+            {text_content.strip()}
+
+            Please respond naturally to the student's message. Do not mention that you're an AI or that you can't directly receive emails.
+            """
                 
             response = await openai_service.process_message(
                 thread_id=thread_id,
@@ -213,7 +242,7 @@ async def handle_email_webhook(
             )
             logger.info("Successfully processed message with OpenAI")
             
-            # MISSING FUNCTIONALITY: Send the response back to the student via email
+            # Send the response back to the student via email
             logger.info(f"Sending email response to {email_address}")
             await sendgrid_service.send_message(
                 to_email=email_address,
