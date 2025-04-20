@@ -120,7 +120,8 @@ async def handle_email_webhook(
     """
     Handles incoming webhook requests from SendGrid for email responses.
     """
-    logger.info("Email webhook endpoint hit")
+    start_time = datetime.utcnow()
+    logger.info(f"Email webhook received at: {start_time}")
     try:
         # Log the raw request for debugging
         body = await request.body()
@@ -273,7 +274,10 @@ async def handle_email_webhook(
         )
         logger.info("Successfully logged interaction in database")
 
-        return {"status": "success"}
+        end_time = datetime.utcnow()
+        processing_time = (end_time - start_time).total_seconds()
+        logger.info(f"Email webhook processing completed in {processing_time} seconds")
+        return {"success, processing time": processing_time}
 
     except HTTPException as http_ex:
         logger.error(f"HTTP Exception in email webhook: {http_ex.detail}")
