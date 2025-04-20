@@ -1,7 +1,7 @@
 # app/services/openai_service.py
 from app.core.config import settings
 from typing import Dict, Any, Optional, List
-from .base_service import BaseAPIService
+from app.services.base_service import BaseAPIService
 import json
 import asyncio
 import logging

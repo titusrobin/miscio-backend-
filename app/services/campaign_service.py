@@ -3,8 +3,8 @@ from typing import Optional, Dict, List
 from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException, status
-from .openai_service import OpenAIService
-from .twilio_service import TwilioService
+from app.services.openai_service import OpenAIService
+from app.services.twilio_service import TwilioService
 from app.services.sendgrid_service import SendGridService  # Add this import
 
 import logging
@@ -94,6 +94,7 @@ class CampaignService:
                                     "type": "initial",
                                     "contact_method": contact_method,
                                     "status": "sent",
+                                    "email_subject": "Message from Miscio Assistant" if contact_method == "email" else None,
                                     "timestamp": datetime.utcnow(),
                                 },
                                 session=session,
@@ -190,3 +191,4 @@ class CampaignService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to get campaign stats: {str(e)}",
             )
+

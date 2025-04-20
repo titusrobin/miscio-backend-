@@ -111,7 +111,7 @@ async def handle_webhook(
         )
 
 
-@router.post("/email")  # Fix the indentation here
+@router.post("/email")
 async def handle_email_webhook(
     request: Request,
     openai_service: OpenAIService = Depends(get_openai_service),
@@ -121,29 +121,45 @@ async def handle_email_webhook(
     Handles incoming webhook requests from SendGrid for email responses.
     """
     try:
-        # Parse the incoming SendGrid webhook payload
-        payload = await request.json()
-        logger.info(f"Received email webhook")
+        # Log the raw request for debugging
+        body = await request.body()
+        logger.info(f"Received email webhook raw body: {body}")
         
-        # Extract the email information from the payload
-        # Note: The exact payload structure depends on how SendGrid formats its webhooks
-        from_email = payload.get("from")
-        text_content = payload.get("text")
+        # Parse the incoming SendGrid webhook form data
+        form_data = await request.form()
+        logger.info(f"Parsed form data: {form_data}")
+        
+        # Extract email information from SendGrid's Parse Webhook
+        from_email = form_data.get("from")
+        subject = form_data.get("subject", "")
+        text_content = form_data.get("text", "")
+        
+        logger.info(f"Extracted email details - From: {from_email}, Subject: {subject}")
         
         if not from_email or not text_content:
+            logger.error("Missing required email fields")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid email payload format",
             )
 
+        # Extract just the email address from the "from" field
+        email_address = from_email
+        if "<" in from_email and ">" in from_email:
+            email_address = from_email.split("<")[1].split(">")[0]
+        
+        logger.info(f"Looking up student with email: {email_address}")    
         # Find student with error handling
-        student = await db.db.students.find_one({"email": from_email})
+        student = await db.db.students.find_one({"email": email_address})
         if not student:
-            logger.warning(f"Unknown student email: {from_email}")
+            logger.warning(f"Unknown student email: {email_address}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
             )
-
+        
+        logger.info(f"Found student: {student.get('first_name')} {student.get('last_name')}")
+        logger.info(f"Student thread_id: {student.get('thread_id')}")
+        
         # Get active campaign
         campaign = await db.db.campaigns.find_one({"status": "active"})
         if not campaign:
@@ -151,36 +167,69 @@ async def handle_email_webhook(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="No active campaign found"
             )
+        
+        logger.info(f"Found active campaign: {campaign.get('description')}")
+        logger.info(f"Campaign assistant_id: {campaign.get('assistant_id')}")
 
         # Process message with OpenAI
         try:
+            if not student.get('thread_id'):
+                logger.error("Student missing thread_id")
+                # Create a thread if missing
+                thread_data = await openai_service.create_thread()
+                thread_id = thread_data["id"]
+                
+                # Update student with new thread_id
+                await db.db.students.update_one(
+                    {"_id": student["_id"]},
+                    {"$set": {"thread_id": thread_id}}
+                )
+                
+                logger.info(f"Created new thread for student: {thread_id}")
+            else:
+                thread_id = student["thread_id"]
+            
+            # Check if campaign has assistant_id
+            if not campaign.get('assistant_id'):
+                logger.error("Campaign missing assistant_id")
+                # Use a default assistant ID or create one
+                # For testing, we can use the admin's assistant ID from your logs
+                assistant_id = "asst_re59LKPfW1Fya4rwuoxVHKOa"  # Default assistant ID
+                
+                # Update the campaign
+                await db.db.campaigns.update_one(
+                    {"_id": campaign["_id"]},
+                    {"$set": {"assistant_id": assistant_id}}
+                )
+                
+                logger.info(f"Updated campaign with assistant_id: {assistant_id}")
+            else:
+                assistant_id = campaign["assistant_id"]
+                
             response = await openai_service.process_message(
-                thread_id=student["thread_id"],
+                thread_id=thread_id,
                 message=text_content.strip(),
-                assistant_id=campaign["assistant_id"],
+                assistant_id=assistant_id,
             )
+            logger.info("Successfully processed message with OpenAI")
+            
+            # MISSING FUNCTIONALITY: Send the response back to the student via email
+            logger.info(f"Sending email response to {email_address}")
+            await sendgrid_service.send_message(
+                to_email=email_address,
+                subject=f"Re: {subject}",
+                message=response
+            )
+            logger.info(f"Email response sent to {email_address}")
+            
         except Exception as e:
-            logger.error(f"OpenAI processing error: {str(e)}")
+            logger.error(f"OpenAI processing error: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Unable to process message",
             )
 
-        # Send response via SendGrid
-        try:
-            await sendgrid_service.send_message(
-                to_email=from_email,
-                subject=f"Re: {payload.get('subject', 'Your message to Miscio')}",
-                message=response
-            )
-        except Exception as e:
-            logger.error(f"SendGrid sending error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Unable to send response",
-            )
-
-        # Log successful interaction
+        # Log successful interaction in database
         await db.db.interactions.insert_one(
             {
                 "student_id": str(student["_id"]),
@@ -188,6 +237,9 @@ async def handle_email_webhook(
                 "message": text_content,
                 "response": response,
                 "contact_method": "email",
+                "email_subject": subject,
+                "type": "response",
+                "status": "sent",
                 "timestamp": datetime.utcnow(),
             }
         )

@@ -22,10 +22,16 @@ class SendGridService:
         
         Args:
             to_email: Recipient's email address
-            subject: Email subject line
+            subject: Email subject line (should include Re: for replies)
             message: Plain text message content
         """
         try:
+            # Ensure subject has Re: prefix if it's a reply and doesn't already have it
+            if not subject.startswith("Re:") and subject.strip() != "":
+                subject = f"Re: {subject}"
+            elif subject.strip() == "":
+                subject = "Message from Miscio Assistant"
+                
             # Create a sender with name and email
             from_email = Email(self.from_email, self.from_name)
             
