@@ -33,6 +33,10 @@ class CampaignService:
             # Start a MongoDB session for transaction
             async with await self.db.client.start_session() as session:
                 async with session.start_transaction():
+                    admin = await self.db.admin_users.find_one({"_id": admin_id})
+                    assistant_id = admin.get("assistant_id")
+                    logger.info(f"Using admin's assistant_id: {assistant_id}")
+
                     # Deactivate existing campaigns
                     await self.db.campaigns.update_many(
                         {"status": "active"},
@@ -46,6 +50,7 @@ class CampaignService:
                         "admin_id": admin_id,
                         "status": "active",
                         "created_at": datetime.utcnow(),
+                        "assistant_id": assistant_id
                     }
 
                     # Insert campaign
