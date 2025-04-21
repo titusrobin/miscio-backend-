@@ -270,6 +270,8 @@ async def handle_email_webhook(
                 "type": "response",
                 "status": "sent",
                 "timestamp": datetime.utcnow(),
+                "assistant_id": campaign.get("assistant_id")  # Add the assistant_id here
+
             }
         )
         logger.info("Successfully logged interaction in database")

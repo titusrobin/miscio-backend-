@@ -96,6 +96,8 @@ class CampaignService:
                                     "status": "sent",
                                     "email_subject": "Message from Miscio Assistant" if contact_method == "email" else None,
                                     "timestamp": datetime.utcnow(),
+                                    "assistant_id": campaign_data.get("assistant_id")  
+
                                 },
                                 session=session,
                             )
