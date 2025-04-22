@@ -9,7 +9,7 @@ class Message(BaseModel):
     timestamp: datetime
 
 class Thread(BaseModel):
-    id: str
+    id: str #TODO openai thread_id? 
     title: str
     admin_id: str
     assistant_id: str

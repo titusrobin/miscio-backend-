@@ -1,30 +1,27 @@
 # app/db/mongodb.py
-from motor.motor_asyncio import AsyncIOMotorClient  # type: ignore
+from motor.motor_asyncio import AsyncIOMotorClient  
 from app.core.config import settings
 from typing import Optional
-from typing import no_type_check
-import logging
+from typing import no_type_check # Tells Python to ignore type checking for this class
 
-logger = logging.getLogger(__name__)
-
+log = logging.getLogger(__name__)
 
 @no_type_check
 class MongoDB:
-    client: AsyncIOMotorClient = None  # type: ignore
-    db = None
+    """Manages MongoDB connections"""
+    # This is a special client for connecting to MongoDB that works with async/await code
+    # "Awaited" - "wait for this task to finish, but let other tasks run while waiting."
+    client: AsyncIOMotorClient = None  # class variable to hold the MongoDB client
+    db = None # class variable to hold the database reference
 
     async def connect_to_database(self):
-        logger.info("Connecting to MongoDB")
-        print(
-            f"Connecting to MongoDB with URL: {settings.MONGODB_URL}"
-        )  # Add this line
+        log.info("Connecting to MongoDB")
         self.client = AsyncIOMotorClient(settings.MONGODB_URL)
         self.db = self.client[settings.MONGODB_DB_NAME]
-        logger.info("Connected to MongoDB")
+        log.info("Connected to MongoDB")
 
     async def close_database_connection(self):
         if self.client:
             self.client.close()
 
-
-db = MongoDB()
+db = MongoDB() # single instance of the MongoDB class that can be imported and used throughout the application.
