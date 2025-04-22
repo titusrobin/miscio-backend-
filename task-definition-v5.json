@@ -37,7 +37,7 @@
                     "CMD-SHELL", 
                     "python -c \"import http.client; import time; time.sleep(5); conn = http.client.HTTPConnection('localhost:8000'); conn.request('GET', '/health'); response = conn.getresponse(); exit(0 if response.status == 200 else 1)\""
                 ],
-                "interval": 30,
+                "interval": 300,
                 "timeout": 10,
                 "retries": 3,
                 "startPeriod": 120
