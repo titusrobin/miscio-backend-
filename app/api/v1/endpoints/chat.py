@@ -1,107 +1,59 @@
 # app/api/v1/endpoints/chat.py
-from fastapi import APIRouter, Depends, HTTPException, status
+import json
+import logging
+from typing import Dict, List
+from datetime import datetime
+from app.db.mongodb import db
 from app.models.admin import Admin
 from app.core.security import get_current_admin_user
 from app.services.openai_service import OpenAIService
 from app.services.campaign_service import CampaignService
-from app.db.mongodb import db
 from app.services.twilio_service import TwilioService
-from typing import Dict, List
-import logging
-import json
-from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, status
+
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-
 def get_openai_service():
     return OpenAIService()
 
+def get_twilio_service():
+    return TwilioService()
 
-def get_campaign_service():
-    openai_service = OpenAIService()
-    twilio_service = TwilioService()
+def get_campaign_service(
+    openai_service: OpenAIService = Depends(get_openai_service),
+    twilio_service: TwilioService = Depends(get_twilio_service) #TODO: add sendgrid service? 
+):
     return CampaignService(openai_service, twilio_service, db.db)
 
-
-async def handle_tool_calls(
-    tool_calls: List[Dict], current_admin: Admin, campaign_service: CampaignService
-) -> List[Dict]:
-    """Handle function calls from the OpenAI assistant"""
-    logger.info(f"Received tool calls to process: {json.dumps(tool_calls, indent=2)}")
-
-    tool_outputs = []
-
-    for tool_call in tool_calls:
-        try:
-            function_name = tool_call["function"]["name"]
-            arguments = json.loads(tool_call["function"]["arguments"])
-            logger.info(
-                f"Handling function call: {function_name} with arguments: {arguments}"
-            )
-
-            if function_name == "run_campaign":
-                # Execute campaign
-                result = await campaign_service.create_campaign(
-                    campaign=arguments["campaign_description"],
-                    admin_id=current_admin.id,
-                )
-
-                tool_outputs.append(
-                    {
-                        "tool_call_id": tool_call["id"],
-                        "output": json.dumps(
-                            {
-                                "status": "success",
-                                "message": f"Campaign started successfully with description: {arguments['campaign_description']}",
-                            }
-                        ),
-                    }
-                )
-
-            elif function_name == "query_student_chats":
-                # Query student chats
-                chat_results = await campaign_service.query_student_chats(
-                    query=arguments["query"]
-                )
-
-                tool_outputs.append(
-                    {
-                        "tool_call_id": tool_call["id"],
-                        "output": json.dumps({"results": chat_results}),
-                    }
-                )
-
-            logger.info(f"Function call handled successfully: {function_name}")
-
-        except Exception as e:
-            logger.error(f"Error handling tool call: {str(e)}")
-            tool_outputs.append(
-                {
-                    "tool_call_id": tool_call["id"],
-                    "output": json.dumps({"error": str(e)}),
-                }
-            )
-
-    return tool_outputs
+# TODO: process_message() and create_message() are almost identical, 
+# refactor to use a single function? abstract database operations acc to need 
 
 
+# When a request comes in to /history/{thread_id}, it includes an Authorization: Bearer <token> header
+# The oauth2_scheme dependency extracts this token
+# When a user logs in, the server generates a token and sends it to the client and the client stores it in local storage. Client then includes this token in the Authorization header of all subsequent requests.
+# The token is not part of the URL. It's sent in the HTTP request header. 
+# GET /api/v1/history/thread_123456 HTTP/1.1
+# Host: api.miscioapp.com (server domain)
+# Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqb2huLmRvZSIsImV4cCI6MTY5ODc2NTQzMn0.8Tj7Wt8lKS_MgD-hNHpPpB9hO5K0q6Jw2xZ3QFfaVYY
+# Accept: application/json
 @router.get("/history/{thread_id}")
-async def get_chat_history(
-    thread_id: str,
-    current_admin: Admin = Depends(get_current_admin_user),
-):
+async def get_chat_history(thread_id: str, 
+                           current_admin: Admin = Depends(get_current_admin_user)): #dependency injection for current admin of existing token(just extracted from header)
     """
     Retrieve chat history for a specific thread.
     """
     try:
         chat_history = await db.db.admin_chats.find_one({"thread_id": thread_id})
+        
         if not chat_history:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Chat history not found"
             )
         return chat_history["messages"]
+    
     except Exception as e:
         logger.error(f"Error retrieving chat history: {str(e)}")
         raise HTTPException(
@@ -112,7 +64,7 @@ async def get_chat_history(
 
 @router.post("/message")
 async def process_message(
-    message: Dict[str, str],
+    message: Dict[str, str], #Type annotation to expect a dictionary with string keys and string values
     current_admin: Admin = Depends(get_current_admin_user),
     openai_service: OpenAIService = Depends(get_openai_service),
     campaign_service: CampaignService = Depends(get_campaign_service),
@@ -140,7 +92,8 @@ async def process_message(
             thread_id=current_admin.thread_id,
             message=content,
             assistant_id=current_admin.assistant_id,
-            run_handler=lambda tool_calls: handle_tool_calls(
+            # Lambda function - compact way to define a function without naming it.
+            run_handler = lambda tool_calls: handle_tool_calls( # defined but NOT executed unless called, this is not like depends(), we're passing the function itself 
                 tool_calls, current_admin, campaign_service
             ),
         )
@@ -160,12 +113,15 @@ async def create_thread(
     current_admin: Admin = Depends(get_current_admin_user),
     openai_service: OpenAIService = Depends(get_openai_service),
 ):
+    """
+    Create a new chat thread for the current admin(when new threads on miscio admin dashboard are created)
+    """
     try:
         # Create OpenAI thread
         thread_data = await openai_service.create_thread()
 
-        thread = {
-            "id": thread_data["id"],
+        thread = { #create a new thread doc to be stored in mongodb
+            "id": thread_data["id"], # Returns new thread id from openai 
             "title": "New Chat",
             "admin_id": str(current_admin.id),
             "assistant_id": current_admin.assistant_id,
@@ -174,9 +130,10 @@ async def create_thread(
             "last_message": "",
         }
 
-        result = await db.db.threads.insert_one(thread)
-        thread["_id"] = str(result.inserted_id)
+        result = await db.db.threads.insert_one(thread) # This _id is returned as part of the insert operation result
+        thread["_id"] = str(result.inserted_id) # Convert _id ObjectId to string
         return thread
+    
     except Exception as e:
         logger.error(f"Error creating thread: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -184,10 +141,14 @@ async def create_thread(
 
 @router.get("/threads")
 async def get_threads(current_admin: Admin = Depends(get_current_admin_user)):
+    """
+    Retrieves all conversation threads for the current admin user, 
+    which would be used to populate the chat screen in an admin dashboard
+    Note: Does not contain the messages, only the thread metadata
+    """
     try:
-        # Get threads from database
         cursor = db.db.threads.find({"admin_id": str(current_admin.id)})
-        threads = await cursor.to_list(length=None)
+        threads = await cursor.to_list(length=None) # retrieves all matching documents as a list
 
         # Convert ObjectIds to strings and format response
         formatted_threads = []
@@ -199,44 +160,42 @@ async def get_threads(current_admin: Admin = Depends(get_current_admin_user)):
                 "assistant_id": thread["assistant_id"],
                 "created_at": thread["created_at"],
                 "last_activity": thread["last_activity"],
-                "last_message": thread.get("last_message", ""),
-                "_id": str(thread["_id"]),  # Convert ObjectId to string
+                "last_message": thread.get("last_message", ""), # safely handle cases where a thread might not have a last_message field
+                "_id": str(thread["_id"]),  
             }
             formatted_threads.append(formatted_thread)
 
-        # Sort by last activity, most recent first
-        formatted_threads.sort(key=lambda x: x["last_activity"], reverse=True)
+        formatted_threads.sort(key=lambda x: x["last_activity"], reverse=True) # Sort by last activity, most recent first
 
         return formatted_threads
+    
     except Exception as e:
         logger.error(f"Error fetching threads: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/threads/{thread_id}/messages")
+@router.get("/threads/{thread_id}/messages") # {thread_id} is a placeholder syntax that defines a path parameter
 async def get_thread_messages(
     thread_id: str,
     current_admin: Admin = Depends(get_current_admin_user),
 ):
+    """
+    Retrieves all messages for a specific thread, 
+    which would be used to populate a single chat conversation in the admin dashboard
+    """
     try:
-        # Get chat history
         chat_history = await db.db.chat_histories.find_one(
             {"thread_id": thread_id, "admin_id": str(current_admin.id)}
         )
 
         if chat_history:
-            # Convert ObjectId to string if present
-            if "_id" in chat_history:
-                chat_history["_id"] = str(chat_history["_id"])
-
-            # Format message timestamps
             messages = chat_history["messages"]
             for message in messages:
                 if isinstance(message["timestamp"], datetime):
-                    message["timestamp"] = message["timestamp"].isoformat()
+                    message["timestamp"] = message["timestamp"].isoformat() # Convert datetime to ISO 8601 format
 
             return messages
-        return []
+        return [] # Return an empty list if no chat history is found
 
     except Exception as e:
         logger.error(f"Error fetching messages: {str(e)}")
@@ -252,7 +211,6 @@ async def create_message(
     campaign_service: CampaignService = Depends(get_campaign_service),
 ):
     try:
-        # Pass the run handler for function calling
         response = await openai_service.process_message(
             thread_id=thread_id,
             message=message["content"],
@@ -262,7 +220,7 @@ async def create_message(
             ),
         )
 
-        messages = [
+        messages = [ #create message array to be stored in mongodb
             {
                 "role": "user",
                 "content": message["content"],
@@ -270,22 +228,20 @@ async def create_message(
             },
             {"role": "assistant", "content": response, "timestamp": datetime.utcnow()},
         ]
-
-        # Now handle database updates within a transaction
+        # MongoDB transaction to ensure that both database updates succeed or fail together
         async with await db.db.client.start_session() as session:
             async with session.start_transaction():
-                # Update chat history
-                await db.db.chat_histories.update_one(
+
+                await db.db.chat_histories.update_one( # 1
                     {"thread_id": thread_id, "admin_id": str(current_admin.id)},
                     {
                         "$push": {"messages": {"$each": messages}},
                     },
                     upsert=True,
-                    session=session,  # Important: Pass the session to the operation
+                    session=session,  # Important: Pass the session to the operation as part of transaction
                 )
-
-                # Update thread last activity
-                await db.db.threads.update_one(
+ 
+                await db.db.threads.update_one( # 2
                     {"id": thread_id},
                     {
                         "$set": {
@@ -303,3 +259,96 @@ async def create_message(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
+
+
+
+
+# =====================================================================
+#================================Utils=================================
+async def handle_tool_calls(
+    tool_calls: List[Dict], current_admin: Admin, campaign_service: CampaignService
+) -> List[Dict]:
+    """
+    Processes function calls requested by the OpenAI assistant and returns the results.
+    
+    This function serves as a bridge between the OpenAI assistant and application business logic.
+    When the assistant needs to perform actions like creating campaigns or querying data,
+    it makes "tool calls" which this function executes.
+    
+    Parameters:
+        tool_calls: List of dictionaries from OpenAI containing function calls to execute.
+                   Each dictionary has the structure:
+                   {
+                       "id": "call_abc123xyz456",  # Unique identifier for this call
+                       "type": "function",         # Type of tool (always "function" here)
+                       "function": {
+                           "name": "function_name",  # Name of function to execute
+                           "arguments": "{\"param1\":\"value1\"}"  # JSON string of arguments
+                       }
+                   }
+        
+    Returns:
+        List of dictionaries containing the results of each tool call:
+        [
+            {
+                "tool_call_id": "call_abc123xyz456",  # ID from the original call
+                "output": "{\"status\":\"success\",\"message\":\"...\"}"  # JSON string result
+            },
+            ...
+        ]
+        
+    Note:
+        This function handles errors for individual tool calls without failing the entire
+        request. If a tool call fails, an error message is returned for that specific call.
+    """
+    logger.info(f"Received tool calls to process: {json.dumps(tool_calls, indent=2)}") #Convert objects to json string
+
+    tool_outputs = []
+    for tool_call in tool_calls:
+        try:
+            function_name = tool_call["function"]["name"]  # Extract the function name and arguments
+            arguments = json.loads(tool_call["function"]["arguments"])
+            logger.info(
+                f"Handling function call: {function_name} with arguments: {arguments}"
+            )
+
+            if function_name == "run_campaign": # Execute the Appropriate Function
+                result = await campaign_service.create_campaign(
+                    campaign=arguments["campaign_description"],
+                    admin_id=current_admin.id,
+                )
+                tool_outputs.append(
+                    {
+                        "tool_call_id": tool_call["id"],
+                        "output": json.dumps(
+                            {
+                                "status": "success",
+                                "message": f"Campaign started successfully with description: {arguments['campaign_description']}",
+                            }
+                        ),
+                    }
+                )
+
+            elif function_name == "query_student_chats":
+                chat_results = await campaign_service.query_student_chats(
+                    query=arguments["query"]
+                )
+                tool_outputs.append(
+                    {
+                        "tool_call_id": tool_call["id"],
+                        "output": json.dumps({"results": chat_results}),
+                    }
+                )
+
+            logger.info(f"Function call handled successfully: {function_name}")
+
+        except Exception as e:
+            logger.error(f"Error handling tool call: {str(e)}")
+            tool_outputs.append(
+                {
+                    "tool_call_id": tool_call["id"],
+                    "output": json.dumps({"error": str(e)}),
+                }
+            )
+
+    return tool_outputs # return tool_outputs so that OpenAI can incorporate the results of the function calls into its response to the admin

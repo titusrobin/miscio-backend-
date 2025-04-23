@@ -9,7 +9,7 @@ import logging
 # Set up logging for this service
 logger = logging.getLogger(__name__)
 
-class OpenAIService(BaseAPIService):
+class OpenAIService(BaseAPIService): #TODO already in campaign service 
     def __init__(self):
         """Initialize the OpenAI service with necessary configuration."""
         super().__init__()
