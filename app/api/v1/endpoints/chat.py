@@ -9,6 +9,7 @@ from app.core.security import get_current_admin_user
 from app.services.openai_service import OpenAIService
 from app.services.campaign_service import CampaignService
 from app.services.twilio_service import TwilioService
+from app.services.sendgrid_service import SendGridService
 from fastapi import APIRouter, Depends, HTTPException, status
 
 
@@ -21,11 +22,15 @@ def get_openai_service():
 def get_twilio_service():
     return TwilioService()
 
+def get_sendgrid_service():
+    return SendGridService()
+
 def get_campaign_service(
     openai_service: OpenAIService = Depends(get_openai_service),
-    twilio_service: TwilioService = Depends(get_twilio_service) #TODO: add sendgrid service? 
+    twilio_service: TwilioService = Depends(get_twilio_service),
+    sendgrid_service: SendGridService = Depends(get_sendgrid_service)
 ):
-    return CampaignService(openai_service, twilio_service, db.db)
+    return CampaignService(openai_service, twilio_service, sendgrid_service, db.db)
 
 # TODO: process_message() and create_message() are almost identical, 
 # refactor to use a single function? abstract database operations acc to need 

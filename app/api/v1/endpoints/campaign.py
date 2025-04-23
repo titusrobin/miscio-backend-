@@ -10,6 +10,7 @@ from app.core.security import get_current_admin_user
 from app.models.campaign import Campaign
 from app.services.openai_service import OpenAIService
 from app.services.twilio_service import TwilioService
+from app.services.sendgrid_service import SendGridService
 from app.db.mongodb import db
 
 router = APIRouter()
@@ -18,7 +19,8 @@ logger = logging.getLogger(__name__)
 def get_campaign_service() -> CampaignService:
     openai_service = OpenAIService()
     twilio_service = TwilioService()
-    return CampaignService(openai_service, twilio_service, db.db)
+    sendgrid_service = SendGridService()
+    return CampaignService(openai_service, twilio_service, sendgrid_service, db.db)
 
  
 @router.post("/", response_model=CampaignResponse) # / endpoint root of the mounted path "/" 
