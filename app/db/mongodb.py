@@ -1,4 +1,5 @@
 # app/db/mongodb.py
+import logging
 from motor.motor_asyncio import AsyncIOMotorClient  
 from app.core.config import settings
 from typing import Optional
