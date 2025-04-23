@@ -45,6 +45,7 @@ async def get_chat_history(thread_id: str,
     """
     Retrieve chat history for a specific thread.
     """
+    logger.info(f"GET /history/{thread_id} - Retrieving chat history")
     try:
         chat_history = await db.db.admin_chats.find_one({"thread_id": thread_id})
         
@@ -72,6 +73,7 @@ async def process_message(
     """
     Process a message from an admin to their assistant
     """
+    logger.info(f"POST /message - Processing admin message. Message data: {message}")
     logger.info("Received request to process message")
     try:
         content = message.get("content")
@@ -116,6 +118,7 @@ async def create_thread(
     """
     Create a new chat thread for the current admin(when new threads on miscio admin dashboard are created)
     """
+    logger.info(f"POST /threads - Creating new thread for admin {current_admin.id}")
     try:
         # Create OpenAI thread
         thread_data = await openai_service.create_thread()
@@ -146,6 +149,7 @@ async def get_threads(current_admin: Admin = Depends(get_current_admin_user)):
     which would be used to populate the chat screen in an admin dashboard
     Note: Does not contain the messages, only the thread metadata
     """
+    logger.info(f"GET /threads - Retrieving all threads for admin {current_admin.id}")
     try:
         cursor = db.db.threads.find({"admin_id": str(current_admin.id)})
         threads = await cursor.to_list(length=None) # retrieves all matching documents as a list
@@ -183,6 +187,7 @@ async def get_thread_messages(
     Retrieves all messages for a specific thread, 
     which would be used to populate a single chat conversation in the admin dashboard
     """
+    logger.info(f"GET /threads/{thread_id}/messages - Retrieving messages for thread")
     try:
         chat_history = await db.db.chat_histories.find_one(
             {"thread_id": thread_id, "admin_id": str(current_admin.id)}
@@ -210,6 +215,7 @@ async def create_message(
     openai_service: OpenAIService = Depends(get_openai_service),
     campaign_service: CampaignService = Depends(get_campaign_service),
 ):
+    logger.info(f"POST /threads/{thread_id}/messages - Creating new message in thread")
     try:
         response = await openai_service.process_message(
             thread_id=thread_id,
