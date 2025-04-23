@@ -22,3 +22,8 @@ class ChatHistory(BaseModel):
     admin_id: str
     assistant_id: str
     messages: List[Message]
+
+
+#Notes
+# 1. chat_history is a collection in mongodb that stores the chat history for each thread
+# 2. threads is a collection in mongodb that stores the metadata for each thread
