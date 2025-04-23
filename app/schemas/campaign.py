@@ -4,6 +4,8 @@ from typing import List
 from datetime import datetime
 from typing import Optional
 
+# TODO: move to models folder? 
+# TODO need settings and completed_at fields? 
 
 class CampaignBase(BaseModel):
     description: str
