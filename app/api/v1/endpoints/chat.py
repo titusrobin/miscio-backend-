@@ -312,7 +312,8 @@ async def handle_tool_calls(
         This function handles errors for individual tool calls without failing the entire
         request. If a tool call fails, an error message is returned for that specific call.
     """
-    logger.info(f"Received tool calls to process: {json.dumps(tool_calls, indent=2)}") #Convert objects to json string
+    #already in openai_service.py logged
+    #logger.info(f"Received tool calls to process: {json.dumps(tool_calls, indent=2)}") #Convert objects to json string
 
     tool_outputs = []
     for tool_call in tool_calls:

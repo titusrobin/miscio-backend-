@@ -1,7 +1,7 @@
 # app/services/campaign_service.py
 from typing import Optional, Dict, List
 from datetime import datetime
-from motor.motor_asyncio import AsyncIOMotorDatabase # engine that drives your MongoDB operations 
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException, status
 from app.services.openai_service import OpenAIService
 from app.services.twilio_service import TwilioService
@@ -25,15 +25,80 @@ class CampaignService:
         self.sendgrid_service = sendgrid_service
         self.db = database
 
-    async def create_campaign(self, campaign: str, admin_id: str) -> Dict: # campaign: extracted from campaign description when openai makes tool call
+    async def _create_campaign_in_db(self, campaign: str, admin_id: str, session) -> Dict:
+        """
+        Helper method to create a campaign in the database within a transaction.
+        """
+        # Deactivate existing campaigns
+        await self.db.campaigns.update_many(
+            {"status": "active"},
+            {"$set": {"status": "inactive"}},
+            session=session,
+        )
+
+        # Create campaign data
+        campaign_data = {
+            "description": campaign,
+            "admin_id": admin_id,
+            "status": "active",
+            "created_at": datetime.utcnow(),
+        }
+        
+        # Insert the campaign
+        result = await self.db.campaigns.insert_one(
+            campaign_data, session=session
+        )
+        campaign_data["id"] = str(result.inserted_id)
+        
+        return campaign_data
+
+    async def _record_student_interaction(
+        self,
+        campaign_id: str,
+        student_id: str,
+        message: str,
+        contact_method: str,
+        interaction_type: str = "initial",
+        status: str = "sent",
+        email_subject: Optional[str] = None,
+        assistant_id: Optional[str] = None,
+        session = None
+    ):
+        """
+        Helper method to record a student interaction in the database.
+        """
+        interaction_data = {
+            "campaign_id": str(campaign_id),
+            "student_id": str(student_id),
+            "message": message,
+            "type": interaction_type,
+            "contact_method": contact_method,
+            "status": status,
+            "timestamp": datetime.utcnow(),
+        }
+        # Add email subject if provided or if contact method is email
+        if email_subject or contact_method == "email":
+            interaction_data["email_subject"] = email_subject or "Message from Miscio Assistant"
+        
+        # Add assistant ID if provided
+        if assistant_id:
+            interaction_data["assistant_id"] = assistant_id
+        
+        # Insert the interaction record
+        await self.db.interactions.insert_one(interaction_data, session=session)
+        
+        logger.debug(f"Recorded {interaction_type} interaction for student {student_id}")
+        return interaction_data
+
+    async def create_campaign(self, campaign: str, admin_id: str) -> Dict:
         """
         Creates a new campaign and initializes student outreach
         """
         logger.info(f"Creating new campaign: {campaign}")
         try:
-            async with await self.db.client.start_session() as session: # Start a MongoDB session for transaction
+            async with await self.db.client.start_session() as session:
                 async with session.start_transaction():
-                    campaign_data = await self._create_campaign_in_db(campaign, admin_id, session) # helper to create campaign in db
+                    campaign_data = await self._create_campaign_in_db(campaign, admin_id, session)
 
                     # student outreach 
                     students = await self.db.students.find({}, session=session).to_list(length=None) 
@@ -84,31 +149,29 @@ class CampaignService:
                 detail=f"Failed to create campaign: {str(e)}",
             )
 
-    # limit number of docs returned from db
-    # query: words lookup as args 
-    async def query_student_chats(self, query: str, limit: int = 100) -> List[Dict]:  ###TODO: summarize results using openai? 
+    async def query_student_chats(self, query: str, limit: int = 100) -> List[Dict]:
         """
         Search through student chat histories
         """
         try:
-            await self.db.interactions.create_index([("message", "text")]) # organized refs: search through message field, organize it for text searching: separate data structure
+            await self.db.interactions.create_index([("message", "text")])
  
             # Perform text search
-            cursor = ( # cursor: a pointer to the first doc in the db
+            cursor = (
                 self.db.interactions.find(
-                    {"$text": {"$search": query}}, {"score": {"$meta": "textScore"}} # get a relevance score based on match to query 
+                    {"$text": {"$search": query}}, {"score": {"$meta": "textScore"}}
                 )
                 .sort([("score", {"$meta": "textScore"})])
-                .limit(limit) # limit number of docs returned from db
+                .limit(limit)
             )
 
             results = []
             async for interaction in cursor:
-                student = await self.db.students.find_one( # get student details
+                student = await self.db.students.find_one(
                     {"_id": interaction["student_id"]}
                 )
 
-                campaign = await self.db.campaigns.find_one( # get campaign details
+                campaign = await self.db.campaigns.find_one(
                     {"_id": interaction["campaign_id"]}
                 )
 
@@ -133,8 +196,7 @@ class CampaignService:
                 detail=f"Failed to query student chats: {str(e)}",
             )
 
-    # get statistics for a specific campaign
-    async def get_campaign_stats(self, campaign_id: str) -> Dict: ###TODO: is interaction the right schema to use? 
+    async def get_campaign_stats(self, campaign_id: str) -> Dict:
         """
         Get statistics for a specific campaign.
     
@@ -169,71 +231,3 @@ class CampaignService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to get campaign stats: {str(e)}",
             )
-
-
-# ===================================================================
-# ========================== Utils ==================================
-async def _create_campaign_in_db(self, campaign: str, admin_id: str, session) -> Dict:
-    """
-    Helper method to create a campaign in the database within a transaction.
-    """
-    # Deactivate existing campaigns
-    await self.db.campaigns.update_many(
-        {"status": "active"},
-        {"$set": {"status": "inactive"}},
-        session=session,
-    )
-
-    # Create campaign data
-    campaign_data = {
-        "description": campaign,
-        "admin_id": admin_id,
-        "status": "active",
-        "created_at": datetime.utcnow(),
-    }
-    
-    # Insert the campaign
-    result = await self.db.campaigns.insert_one(
-        campaign_data, session=session
-    )
-    campaign_data["id"] = str(result.inserted_id)
-    
-    return campaign_data
-
-async def _record_student_interaction(
-    self,
-    campaign_id: str,
-    student_id: str,
-    message: str,
-    contact_method: str,
-    interaction_type: str = "initial",
-    status: str = "sent",
-    email_subject: Optional[str] = None,
-    assistant_id: Optional[str] = None,
-    session = None
-):
-    """
-    Helper method to record a student interaction in the database.
-    """
-    interaction_data = {
-        "campaign_id": str(campaign_id),
-        "student_id": str(student_id),
-        "message": message,
-        "type": interaction_type,
-        "contact_method": contact_method,
-        "status": status,
-        "timestamp": datetime.utcnow(),
-    }
-    # Add email subject if provided or if contact method is email
-    if email_subject or contact_method == "email":
-        interaction_data["email_subject"] = email_subject or "Message from Miscio Assistant"
-    
-    # Add assistant ID if provided
-    if assistant_id:
-        interaction_data["assistant_id"] = assistant_id
-    
-    # Insert the interaction record
-    await self.db.interactions.insert_one(interaction_data, session=session)
-    
-    logger.debug(f"Recorded {interaction_type} interaction for student {student_id}")
-    return interaction_data
