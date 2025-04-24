@@ -144,33 +144,96 @@ class OpenAIService(BaseAPIService):
         logger.info(f"Starting to process message in thread {thread_id}")
         logger.info(f"Assistant ID: {assistant_id}")
         logger.info(f"Run handler provided: {run_handler is not None}")
+        logger.info(f"Message content: {message[:100]}..." if len(message) > 100 else f"Message content: {message}")
 
         try:
-            await self.make_request( # create the message in the thread
+            # Check if assistant_id is valid and log its configuration
+            try:
+                # Verify the assistant exists and log its details
+                assistant_response = await self.make_request(
+                    method="GET",
+                    url=f"{self.base_url}/assistants/{assistant_id}",
+                    headers=self.headers,
+                )
+                
+                # Log detailed assistant information
+                logger.info(f"Assistant verified: {assistant_id}")
+                logger.info(f"Assistant name: {assistant_response.get('name', 'Not set')}")
+                logger.info(f"Assistant model: {assistant_response.get('model', 'Not set')}")
+                
+                # Log tools information
+                tools = assistant_response.get('tools', [])
+                logger.info(f"Assistant tools count: {len(tools)}")
+                tool_types = [tool.get('type') for tool in tools]
+                logger.info(f"Assistant tool types: {tool_types}")
+                
+                # Specifically check for file_search capability
+                has_file_search = any(tool.get('type') == 'file_search' for tool in tools)
+                logger.info(f"Assistant has file search enabled: {has_file_search}")
+                
+                # Log file information
+                file_ids = assistant_response.get('file_ids', [])
+                logger.info(f"Assistant file IDs: {file_ids}")
+                if file_ids:
+                    logger.info(f"Number of files attached to assistant: {len(file_ids)}")
+                    # If needed, you could make additional API calls to get file details
+                    
+            except Exception as e:
+                logger.error(f"Error verifying assistant {assistant_id}: {str(e)}")
+                if hasattr(e, 'response') and hasattr(e.response, 'text'):
+                    logger.error(f"Response error: {e.response.text}")
+                raise Exception(f"Invalid assistant ID: {assistant_id}")
+
+            # Create the message in the thread
+            message_response = await self.make_request(
                 method="POST",
                 url=f"{self.base_url}/threads/{thread_id}/messages",
                 headers=self.headers,
                 data={"role": "user", "content": message}
             )
+            logger.info(f"Created message in thread. Message ID: {message_response.get('id')}")
 
-            run_response = await self.make_request( # create and start a new run
-                method="POST",
-                url=f"{self.base_url}/threads/{thread_id}/runs",
-                headers=self.headers,
-                data={"assistant_id": assistant_id}
-            )
-            run_id = run_response["id"]
-            logger.info(f"Started new run with ID: {run_id}")
-
-            # Monitor the run status and handle any required actions
-            while True:    
-                status_response = await self.make_request(
-                    method="GET",
-                    url=f"{self.base_url}/threads/{thread_id}/runs/{run_id}",
-                    headers=self.headers
+            # Create and start a new run with improved error handling
+            try:
+                run_response = await self.make_request(
+                    method="POST",
+                    url=f"{self.base_url}/threads/{thread_id}/runs",
+                    headers=self.headers,
+                    data={"assistant_id": assistant_id}
                 )
+                run_id = run_response["id"]
+                logger.info(f"Started new run with ID: {run_id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to start run: {str(e)}")
+                if hasattr(e, 'response') and hasattr(e.response, 'text'):
+                    logger.error(f"Response error: {e.response.text}")
+                raise Exception(f"Failed to start conversation with assistant: {str(e)}")
 
-                # if the run requires action, it means the assistant is waiting for a tool call
+            # Monitor the run status with enhanced logging
+            max_retries = 40  # Maximum number of status checks
+            retries = 0
+            
+            while retries < max_retries:
+                try:
+                    status_response = await self.make_request(
+                        method="GET",
+                        url=f"{self.base_url}/threads/{thread_id}/runs/{run_id}",
+                        headers=self.headers
+                    )
+                    
+                    # Log current status on each check
+                    logger.info(f"Run status check {retries+1}/{max_retries}: {status_response['status']}")
+                    
+                except Exception as e:
+                    logger.error(f"Error checking run status: {str(e)}")
+                    if hasattr(e, 'response') and hasattr(e.response, 'text'):
+                        logger.error(f"Response error: {e.response.text}")
+                    retries += 1
+                    await asyncio.sleep(1)
+                    continue
+
+                # Handle function calls (remaining logic same as before)
                 if status_response["status"] == "requires_action":
                     if run_handler:
                         tool_calls = status_response["required_action"]["submit_tool_outputs"]["tool_calls"]
@@ -190,40 +253,123 @@ class OpenAIService(BaseAPIService):
                         logger.error("Function call required but no run_handler provided")
                         raise Exception("Function execution not supported")
 
-                # if the run is completed, get the final response
+                    
+                # On completion, get the final response
                 elif status_response["status"] == "completed":
-                    messages_response = await self.make_request(
-                        method="GET",
-                        url=f"{self.base_url}/threads/{thread_id}/messages",
-                        headers=self.headers,
-                        params={"limit": 1, "order": "desc"}
-                    )
+                    logger.info(f"Run completed successfully after {retries+1} checks")
+                    
+                    try:
+                        messages_response = await self.make_request(
+                            method="GET",
+                            url=f"{self.base_url}/threads/{thread_id}/messages",
+                            headers=self.headers,
+                            params={"limit": 1, "order": "desc"}
+                        )
+                        
+                        # Log response details
+                        if messages_response.get("data") and len(messages_response["data"]) > 0:
+                            message_id = messages_response["data"][0].get("id", "unknown")
+                            logger.info(f"Retrieved message ID: {message_id}")
+                            
+                            # Check if content exists
+                            message_content = messages_response["data"][0].get("content", [])
+                            if not message_content:
+                                logger.error("Message content array is empty")
+                                raise Exception("Empty message content returned")
+                                
+                            # Check if it contains text content
+                            has_text = any(content.get("type") == "text" for content in message_content)
+                            logger.info(f"Message has text content: {has_text}")
+                            
+                            if has_text:
+                                # Extract and return the text value
+                                text_content = next((content["text"]["value"] for content in message_content 
+                                                if content.get("type") == "text" and content.get("text", {}).get("value")), None)
+                                
+                                if text_content:
+                                    logger.info(f"Response text length: {len(text_content)}")
+                                    logger.info(f"Response preview: {text_content[:100]}...")
+                                    return text_content
+                                else:
+                                    logger.error("No text value found in message content")
+                                    raise Exception("No valid text content in response")
+                            else:
+                                logger.error("No text type content in message")
+                                logger.error(f"Available content types: {[content.get('type') for content in message_content]}")
+                                raise Exception("No text content in response")
+                        else:
+                            logger.error("No messages returned in response")
+                            logger.error(f"Full response: {json.dumps(messages_response, indent=2)}")
+                            raise Exception("Invalid message response")
+                            
+                    except Exception as e:
+                        logger.error(f"Error retrieving messages: {str(e)}")
+                        if hasattr(e, 'response') and hasattr(e.response, 'text'):
+                            logger.error(f"Response error: {e.response.text}")
+                        raise Exception(f"Failed to retrieve assistant response: {str(e)}")
 
-                    # Validate the response structure
-                    if not messages_response.get("data"):
-                        logger.error("No messages returned in response")
-                        raise Exception("Invalid message response")
-
-                    message_content = messages_response["data"][0].get("content", [])
-                    if not message_content or not message_content[0].get("text", {}).get("value"):
-                        logger.error("Invalid message content structure")
-                        raise Exception("Invalid message content")
-
-                    return message_content[0]["text"]["value"]
-
+                # Handle failure states with detailed logging
                 elif status_response["status"] in ["failed", "cancelled", "expired"]:
-                    error_message = f"Run failed with status: {status_response['status']}"
-                    logger.error(error_message)
-                    raise Exception(error_message)
+                    # Extract error information
+                    error_message = status_response.get("last_error", {}).get("message", "Unknown error")
+                    error_code = status_response.get("last_error", {}).get("code", "unknown")
+                    
+                    # Log full status response for debugging
+                    logger.error(f"Run failed with full status response: {json.dumps(status_response, indent=2)}")
+                    logger.error(f"Run failed with status: {status_response['status']}, code: {error_code}, message: {error_message}")
+                    
+                    # Try to get more details about the run steps
+                    try:
+                        run_steps_response = await self.make_request(
+                            method="GET",
+                            url=f"{self.base_url}/threads/{thread_id}/runs/{run_id}/steps",
+                            headers=self.headers
+                        )
+                        
+                        # Log the run steps for detailed debugging
+                        if run_steps_response.get("data"):
+                            steps = run_steps_response.get("data", [])
+                            logger.error(f"Run had {len(steps)} steps before failure")
+                            
+                            # Log each step with its status
+                            for i, step in enumerate(steps):
+                                step_id = step.get("id", "unknown")
+                                step_type = step.get("type", "unknown")
+                                step_status = step.get("status", "unknown")
+                                
+                                logger.error(f"Step {i+1}: ID={step_id}, Type={step_type}, Status={step_status}")
+                                
+                                # If step has error, log it
+                                if step.get("step_details") and step.get("step_details").get("message_creation") and step.get("step_details").get("message_creation").get("text"):
+                                    logger.error(f"Step message: {step['step_details']['message_creation']['text']}")
+                        else:
+                            logger.error("No run steps found")
+                            
+                    except Exception as step_err:
+                        logger.error(f"Error getting run steps: {str(step_err)}")
+                    
+                    # Return appropriate error message
+                    if error_code == "rate_limit_exceeded":
+                        raise Exception("The AI service is currently experiencing high demand. Please try again in a few minutes.")
+                    elif error_code == "content_filter":
+                        raise Exception("Your message couldn't be processed due to content filtering. Please rephrase your question.")
+                    else:
+                        raise Exception(f"Run failed: {error_message}")
 
-                await asyncio.sleep(1) # wait for 1 second before checking the status again 
-                ###TODO: make 0.5? 
+                # Still in progress
+                else:
+                    retries += 1
+                    await asyncio.sleep(1)
+                    continue
+
+            # If we've exceeded max retries
+            logger.error(f"Run timed out after {max_retries} checks")
+            raise Exception("The request timed out. Please try again later.")
 
         except Exception as e:
             logger.error(f"Error processing message: {str(e)}", exc_info=True)
             raise
 
-    
     async def __aenter__(self): # Simply returns the service instance itself
         """Support for async context manager protocol."""
         return self

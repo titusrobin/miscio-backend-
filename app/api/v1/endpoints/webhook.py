@@ -7,6 +7,9 @@ from app.db.mongodb import db
 from typing import Optional
 import logging
 from datetime import datetime
+import uuid
+import json
+from bson import ObjectId
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -117,32 +120,47 @@ async def handle_email_webhook(
     Handles incoming webhook requests from SendGrid for email responses.
     """
     start_time = datetime.utcnow()
-    logger.info(f"Email webhook received at: {start_time}")
+    request_id = str(uuid.uuid4())[:8]  # Generate a short request ID for tracking this request in logs
+    logger.info(f"[REQ-{request_id}] Email webhook received at: {start_time}")
     try:
-         # Parse the incoming SendGrid webhook form data
+        # Parse the incoming SendGrid webhook form data with detailed logging
         body = await request.body()
-        logger.info(f"Received email webhook raw body length: {len(body)}")
+        body_size = len(body)
+        logger.info(f"[REQ-{request_id}] Received email webhook raw body length: {body_size}")
         
+        # Log headers for troubleshooting
+        headers = dict(request.headers)
+        sanitized_headers = {k: v for k, v in headers.items() 
+                           if k.lower() not in ('authorization', 'cookie')}  # Remove sensitive headers
+        logger.info(f"[REQ-{request_id}] Request headers: {json.dumps(sanitized_headers)}")
+        
+        # Parse form data with expanded logging
         form_data = await request.form()
-        logger.info(f"Parsed form data keys: {list(form_data.keys())}")
+        form_keys = list(form_data.keys())
+        logger.info(f"[REQ-{request_id}] Parsed form data keys: {form_keys}")
         
         from_email = form_data.get("from")
         subject = form_data.get("subject", "")
         text_content = form_data.get("text", "")
         
-        logger.info(f"Extracted email details - From: {from_email}, Subject: {subject}")
+        logger.info(f"[REQ-{request_id}] Extracted email details - From: {from_email}, Subject: {subject}")
+
+        # Log message size
+        text_length = len(text_content) if text_content else 0
+        logger.info(f"[REQ-{request_id}] Text content length: {text_length}")
         
-        # Fallback to alternate field names if primary fields are empty
-        if not from_email and "envelope" in form_data: # envelope: The actual routing information used by mail servers
+        # Enhanced fallback logging for email field extraction
+        if not from_email and "envelope" in form_data:
             try:
                 import json
                 envelope_raw = form_data["envelope"]
-                logger.info(f"Parsing envelope: {envelope_raw}")
+                logger.info(f"[REQ-{request_id}] Parsing envelope: {envelope_raw}")
                 envelope = json.loads(envelope_raw)
                 from_email = envelope.get("from")
-                logger.info(f"Extracted from_email from envelope: {from_email}")
+                logger.info(f"[REQ-{request_id}] Extracted from_email from envelope: {from_email}")
             except Exception as e:
-                logger.error(f"Failed to parse envelope JSON: {str(e)}")
+                logger.error(f"[REQ-{request_id}] Failed to parse envelope JSON: {str(e)}")
+                logger.error(f"[REQ-{request_id}] Raw envelope content: {form_data.get('envelope', 'N/A')}")
         
         if not text_content: # if no text content, use alternate content source
             alt_content = form_data.get("body-plain", "") or form_data.get("plain", "")
@@ -170,8 +188,12 @@ async def handle_email_webhook(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
             )
         
-        logger.info(f"Found student: {student.get('first_name')} {student.get('last_name')}")
-        logger.info(f"Student thread_id: {student.get('thread_id')}")
+        # Log student details for tracking
+        student_id = str(student.get("_id", "unknown"))
+        student_name = f"{student.get('first_name', '')} {student.get('last_name', '')}"
+        student_thread_id = student.get("thread_id", "none")
+        logger.info(f"[REQ-{request_id}] Found student: {student_name} (ID: {student_id})")
+        logger.info(f"[REQ-{request_id}] Student thread_id: {student_thread_id}")
         
         # Get active campaign
         campaign = await db.db.campaigns.find_one({"status": "active"})
@@ -181,8 +203,13 @@ async def handle_email_webhook(
                 status_code=status.HTTP_404_NOT_FOUND, detail="No active campaign found"
             )
         
-        logger.info(f"Found active campaign: {campaign.get('description')}")
-        logger.info(f"Campaign assistant_id: {campaign.get('assistant_id')}")
+        # Log campaign details
+        campaign_id = str(campaign.get("_id", "unknown"))
+        campaign_desc = campaign.get("description", "No description")
+        campaign_assistant_id = campaign.get("assistant_id", "None")
+        logger.info(f"[REQ-{request_id}] Found active campaign: {campaign_desc[:50]}...")
+        logger.info(f"[REQ-{request_id}] Campaign ID: {campaign_id}")
+        logger.info(f"[REQ-{request_id}] Campaign assistant_id: {campaign_assistant_id}")
 
         # Process message with OpenAI
         try:
@@ -200,22 +227,25 @@ async def handle_email_webhook(
                 thread_id = student["thread_id"]
                 logger.info(f"Using existing thread_id: {thread_id}")
             
-            # Check if campaign has assistant_id
-            if not campaign.get('assistant_id'):
-                assistant_id = "asst_re59LKPfW1Fya4rwuoxVHKOa"  # Default assistant ID
-                
-                await db.db.campaigns.update_one(
-                    {"_id": campaign["_id"]},
-                    {"$set": {"assistant_id": assistant_id}}
-                )
-                
-                logger.info(f"Updated campaign with assistant_id: {assistant_id}")
-            else:
-                assistant_id = campaign["assistant_id"]
-                logger.info(f"Using existing assistant_id: {assistant_id}")
+            if not campaign_assistant_id:
+                logger.warning(f"[REQ-{request_id}] Campaign has no assistant_id. Will need to create one.")
+            
+            # Get admin who created the campaign
+            admin_id = campaign.get("admin_id")
+            if admin_id:
+                logger.info(f"[REQ-{request_id}] Looking up admin {admin_id} for assistant_id")
+                admin = await db.db.admin_users.find_one({"_id": ObjectId(admin_id)})
+                if admin and admin.get("assistant_id"):
+                    logger.info(f"[REQ-{request_id}] Found admin's assistant_id: {admin.get('assistant_id')}")
+                else:
+                    logger.warning(f"[REQ-{request_id}] Admin has no assistant_id")
+            
+            # For now, just log that we're using the default
+            logger.info(f"[REQ-{request_id}] Will use default assistant: asst_re59LKPfW1Fya4rwuoxVHKOa")
 
             logger.info("Sending message to OpenAI for processing")   
-            logger.info(f"Thread ID: {thread_id}, Assistant ID: {assistant_id}")
+            assistant_id = campaign.get("assistant_id") or "asst_re59LKPfW1Fya4rwuoxVHKOa"
+            logger.info(f"[REQ-{request_id}] Thread ID: {thread_id}, Assistant ID: {assistant_id}")
             logger.info(f"Message content (first 100 chars): {text_content[:100] if text_content else ''}")
             
             response = await openai_service.process_message(
