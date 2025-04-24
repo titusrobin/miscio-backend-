@@ -149,12 +149,17 @@ class OpenAIService(BaseAPIService):
         try:
             # Check if assistant_id is valid and log its configuration
             try:
+
                 # Verify the assistant exists and log its details
                 assistant_response = await self.make_request(
                     method="GET",
                     url=f"{self.base_url}/assistants/{assistant_id}",
                     headers=self.headers,
                 )
+
+                # First, ensure the vector store is properly attached to the assistant
+                vector_store_id = "vs_6806b8d5767c8191b307104b59ce1949"
+                await self.ensure_vector_store_attached(assistant_id, vector_store_id)
                 
                 # Log detailed assistant information
                 logger.info(f"Assistant verified: {assistant_id}")
@@ -378,3 +383,63 @@ class OpenAIService(BaseAPIService):
     async def __aexit__(self, exc_type, exc_val, exc_tb): # clean up resources
         """Ensure proper cleanup of resources when used as a context manager."""
         await self.close()
+
+    async def ensure_vector_store_attached(self, assistant_id: str, vector_store_id: str = "vs_6806b8d5767c8191b307104b59ce1949") -> bool:
+        """
+        Ensures the specified vector store is properly attached to the assistant.
+        Returns True if successful, False otherwise.
+        
+        This solves the issue where vector stores appear in the UI but aren't properly
+        configured in the API.
+        """
+        try:
+            # Check if assistant exists and has the vector store attached
+            logger.info(f"Verifying vector store attachment for assistant {assistant_id}")
+            
+            # Get current assistant configuration
+            assistant_response = await self.make_request(
+                method="GET",
+                url=f"{self.base_url}/assistants/{assistant_id}",
+                headers=self.headers
+            )
+            
+            # Check if vector store is already attached
+            tool_resources = assistant_response.get('tool_resources', {})
+            file_search = tool_resources.get('file_search', {})
+            vector_store_ids = file_search.get('vector_store_ids', [])
+            
+            if vector_store_id in vector_store_ids:
+                logger.info(f"Vector store {vector_store_id} is already attached to assistant {assistant_id}")
+                return True
+                
+            # Vector store not attached, update the assistant
+            logger.info(f"Attaching vector store {vector_store_id} to assistant {assistant_id}")
+            
+            updated_assistant = await self.make_request(
+                method="POST",
+                url=f"{self.base_url}/assistants/{assistant_id}",
+                headers=self.headers,
+                data={
+                    "tool_resources": {
+                        "file_search": {
+                            "vector_store_ids": [vector_store_id]
+                        }
+                    }
+                }
+            )
+            
+            # Verify update
+            updated_tool_resources = updated_assistant.get('tool_resources', {})
+            updated_file_search = updated_tool_resources.get('file_search', {})
+            updated_vector_store_ids = updated_file_search.get('vector_store_ids', [])
+            
+            if vector_store_id in updated_vector_store_ids:
+                logger.info(f"Successfully attached vector store {vector_store_id} to assistant {assistant_id}")
+                return True
+            else:
+                logger.warning(f"Failed to attach vector store {vector_store_id} to assistant {assistant_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error ensuring vector store attachment: {str(e)}")
+            return False
