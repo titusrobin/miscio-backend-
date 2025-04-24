@@ -152,7 +152,6 @@ async def handle_email_webhook(
         # Enhanced fallback logging for email field extraction
         if not from_email and "envelope" in form_data:
             try:
-                import json
                 envelope_raw = form_data["envelope"]
                 logger.info(f"[REQ-{request_id}] Parsing envelope: {envelope_raw}")
                 envelope = json.loads(envelope_raw)
