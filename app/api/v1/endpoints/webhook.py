@@ -2,29 +2,25 @@
 from fastapi import APIRouter, HTTPException, Depends, Form, Request, status
 from app.services.openai_service import OpenAIService
 from app.services.twilio_service import TwilioService
-from app.services.sendgrid_service import SendGridService  # Add this import
+from app.services.sendgrid_service import SendGridService   
 from app.db.mongodb import db
 from typing import Optional
 import logging
 from datetime import datetime
 
-
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
 
 def get_openai_service():
     return OpenAIService()
 
-
 def get_twilio_service():
     return TwilioService()
-
 
 def get_sendgrid_service():
     return SendGridService()
 
-
+#TODO: Twilio webhook coverage 
 @router.post("/webhook")
 async def handle_webhook(
     request: Request,
@@ -113,7 +109,7 @@ async def handle_webhook(
 
 @router.post("/email")
 async def handle_email_webhook(
-    request: Request,
+    request: Request, # access to the raw HTTP req 
     openai_service: OpenAIService = Depends(get_openai_service),
     sendgrid_service: SendGridService = Depends(get_sendgrid_service),
 ):
@@ -123,15 +119,13 @@ async def handle_email_webhook(
     start_time = datetime.utcnow()
     logger.info(f"Email webhook received at: {start_time}")
     try:
-        # Log the raw request for debugging
+         # Parse the incoming SendGrid webhook form data
         body = await request.body()
         logger.info(f"Received email webhook raw body length: {len(body)}")
         
-        # Parse the incoming SendGrid webhook form data
         form_data = await request.form()
         logger.info(f"Parsed form data keys: {list(form_data.keys())}")
         
-        # Extract email information from SendGrid's Parse Webhook
         from_email = form_data.get("from")
         subject = form_data.get("subject", "")
         text_content = form_data.get("text", "")
@@ -139,7 +133,7 @@ async def handle_email_webhook(
         logger.info(f"Extracted email details - From: {from_email}, Subject: {subject}")
         
         # Fallback to alternate field names if primary fields are empty
-        if not from_email and "envelope" in form_data:
+        if not from_email and "envelope" in form_data: # envelope: The actual routing information used by mail servers
             try:
                 import json
                 envelope_raw = form_data["envelope"]
@@ -150,14 +144,13 @@ async def handle_email_webhook(
             except Exception as e:
                 logger.error(f"Failed to parse envelope JSON: {str(e)}")
         
-        if not text_content:
+        if not text_content: # if no text content, use alternate content source
             alt_content = form_data.get("body-plain", "") or form_data.get("plain", "")
             logger.info(f"Using alternate content source - length: {len(alt_content) if alt_content else 0}")
             text_content = alt_content
-        
-        if not from_email or not text_content:
+         
+        if not from_email or not text_content: # Log all available fields for debugging
             logger.error("Missing required email fields")
-            # Log all available fields for debugging
             for key in form_data.keys():
                 logger.info(f"Available field: {key} with content: {str(form_data.get(key))[:50]}...")
             raise HTTPException(
@@ -165,14 +158,11 @@ async def handle_email_webhook(
                 detail="Invalid email payload format",
             )
 
-        # Extract just the email address from the "from" field
+        # Email addressing
         email_address = from_email
         if email_address and "<" in str(email_address) and ">" in str(email_address):
             email_address = str(email_address).split("<")[1].split(">")[0]
-            logger.info(f"Extracted clean email address: {email_address}")
-        
-        logger.info(f"Looking up student with email: {email_address}")    
-        # Find student with error handling
+            
         student = await db.db.students.find_one({"email": email_address})
         if not student:
             logger.warning(f"Unknown student email: {email_address}")
@@ -197,11 +187,9 @@ async def handle_email_webhook(
         # Process message with OpenAI
         try:
             if not student.get('thread_id'):
-                logger.info("Student missing thread_id, creating new thread")
                 thread_data = await openai_service.create_thread()
                 thread_id = thread_data["id"]
                 
-                # Update student with new thread_id
                 await db.db.students.update_one(
                     {"_id": student["_id"]},
                     {"$set": {"thread_id": thread_id}}
@@ -214,11 +202,8 @@ async def handle_email_webhook(
             
             # Check if campaign has assistant_id
             if not campaign.get('assistant_id'):
-                logger.error("Campaign missing assistant_id")
-                # Use a default assistant ID or create one
                 assistant_id = "asst_re59LKPfW1Fya4rwuoxVHKOa"  # Default assistant ID
                 
-                # Update the campaign
                 await db.db.campaigns.update_one(
                     {"_id": campaign["_id"]},
                     {"$set": {"assistant_id": assistant_id}}
@@ -238,27 +223,21 @@ async def handle_email_webhook(
                 message=text_content.strip(),
                 assistant_id=assistant_id,
             )
-            logger.info("Successfully processed message with OpenAI")
-            logger.info(f"OpenAI response (first 100 chars): {response[:100]}")
             
             # Send the response back to the student via email
-            logger.info(f"Sending email response to {email_address}")
             await sendgrid_service.send_message(
                 to_email=email_address,
                 subject=f"Re: {subject}",
                 message=response
             )
-            logger.info(f"Email response sent to {email_address}")
             
         except Exception as e:
-            logger.error(f"OpenAI processing error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Unable to process message",
             )
 
         # Log successful interaction in database
-        logger.info("Logging interaction in database")
         await db.db.interactions.insert_one(
             {
                 "student_id": str(student["_id"]),
@@ -274,7 +253,6 @@ async def handle_email_webhook(
 
             }
         )
-        logger.info("Successfully logged interaction in database")
 
         end_time = datetime.utcnow()
         processing_time = (end_time - start_time).total_seconds()
@@ -284,9 +262,9 @@ async def handle_email_webhook(
     except HTTPException as http_ex:
         logger.error(f"HTTP Exception in email webhook: {http_ex.detail}")
         raise
+
     except Exception as e:
         logger.error(f"Email webhook handling error: {str(e)}")
-        # Get stack trace for deeper debugging
         import traceback
         trace = traceback.format_exc()
         logger.error(f"Stack trace:\n{trace}")

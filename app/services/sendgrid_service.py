@@ -20,22 +20,17 @@ class SendGridService:
         """
         Sends an email message to a student.
         
-        Args:
-            to_email: Recipient's email address
-            subject: Email subject line (should include Re: for replies)
-            message: Plain text message content
         """
         try:
             # Ensure subject has Re: prefix if it's a reply and doesn't already have it
-            if not subject.startswith("Re:") and subject.strip() != "":
+            if not subject.startswith("Re:") and subject.strip() != "": #TODO: fix multiple RE's 
                 subject = f"Re: {subject}"
             elif subject.strip() == "":
                 subject = "Message from Miscio Assistant"
                 
-            # Create a sender with name and email
+            # Create sender and mail object 
             from_email = Email(self.from_email, self.from_name)
             
-            # Create a simple mail object
             mail = Mail(
                 from_email=from_email,
                 to_emails=to_email,
