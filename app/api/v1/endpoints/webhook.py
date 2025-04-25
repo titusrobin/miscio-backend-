@@ -10,7 +10,8 @@ from datetime import datetime
 import uuid
 import json
 from bson import ObjectId
-
+from typing import Dict, List
+from app.services.campaign_service import CampaignService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,13 @@ def get_twilio_service():
 
 def get_sendgrid_service():
     return SendGridService()
+
+def get_campaign_service(
+    openai_service: OpenAIService = Depends(get_openai_service),
+    twilio_service: TwilioService = Depends(get_twilio_service),
+    sendgrid_service: SendGridService = Depends(get_sendgrid_service)
+):
+    return CampaignService(openai_service, twilio_service, sendgrid_service, db.db)
 
 #TODO: Twilio webhook coverage 
 @router.post("/webhook")
@@ -115,6 +123,7 @@ async def handle_email_webhook(
     request: Request, # access to the raw HTTP req 
     openai_service: OpenAIService = Depends(get_openai_service),
     sendgrid_service: SendGridService = Depends(get_sendgrid_service),
+    campaign_service: CampaignService = Depends(get_campaign_service),
 ):
     """
     Handles incoming webhook requests from SendGrid for email responses.
@@ -251,6 +260,9 @@ async def handle_email_webhook(
                 thread_id=thread_id,
                 message=text_content.strip(),
                 assistant_id=assistant_id,
+                run_handler=lambda tool_calls: handle_student_tool_calls(
+                    tool_calls, student, campaign_service
+                ),
             )
             
             # Send the response back to the student via email
@@ -301,3 +313,42 @@ async def handle_email_webhook(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
         )
+
+async def handle_student_tool_calls(
+    tool_calls: List[Dict], student: Dict, campaign_service: CampaignService
+) -> List[Dict]:
+    """
+    Processes function calls requested by the OpenAI assistant for student interactions.
+    """
+    logger.info(f"Handling student tool calls: {json.dumps(tool_calls, indent=2)}")
+    
+    tool_outputs = []
+    for tool_call in tool_calls:
+        try:
+            function_name = tool_call["function"]["name"]
+            arguments = json.loads(tool_call["function"]["arguments"])
+            logger.info(
+                f"Handling student function call: {function_name} with arguments: {arguments}"
+            )
+            
+            # Add handlers for your functions here
+            # For file_search, you don't need to do anything as it's handled by the Assistant API
+            
+            # Add default output for unhandled functions
+            tool_outputs.append(
+                {
+                    "tool_call_id": tool_call["id"],
+                    "output": json.dumps({"status": "success", "message": "Tool call processed"}),
+                }
+            )
+            
+        except Exception as e:
+            logger.error(f"Error handling student tool call: {str(e)}")
+            tool_outputs.append(
+                {
+                    "tool_call_id": tool_call["id"],
+                    "output": json.dumps({"error": str(e)}),
+                }
+            )
+    
+    return tool_outputs
