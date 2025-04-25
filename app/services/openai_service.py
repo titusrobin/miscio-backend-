@@ -275,16 +275,13 @@ class OpenAIService(BaseAPIService):
                 elif status_response["status"] == "completed":
                     logger.info(f"Run completed successfully after {retries+1} checks")
                     
-                    try:
-                        # Include file search results in the response if requested
-                        include_params = ["step_details.tool_calls[*].file_search.results[*].content"]
-                        
+                    try:                     
                         # Get run steps to check if file search was used
                         run_steps_response = await self.make_request(
                             method="GET",
                             url=f"{self.base_url}/threads/{thread_id}/runs/{run_id}/steps",
                             headers=self.headers,
-                            params={"include": include_params}
+                            params={"include": ["step_details.tool_calls.file_search.results.content"]}
                         )
                         
                         # Log if file search was used
