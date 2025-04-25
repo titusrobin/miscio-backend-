@@ -16,4 +16,5 @@ class Student(BaseModel):
     preferred_contact_method: str = "email"  # Default to email
     status: str = "active"
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    thread_id: Optional[str] = None
     #TODO: mongodb has thread_id - need? 

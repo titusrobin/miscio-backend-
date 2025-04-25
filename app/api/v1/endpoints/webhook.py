@@ -219,6 +219,21 @@ async def handle_email_webhook(
         logger.info(f"[REQ-{request_id}] Campaign ID: {campaign_id}")
         logger.info(f"[REQ-{request_id}] Campaign assistant_id: {campaign_assistant_id}")
 
+        # Get admin associated with the campaign
+        admin_id = campaign.get("admin_id")
+        admin = await db.db.admin_users.find_one({"_id": ObjectId(admin_id)})
+        
+        if not admin:
+            logger.error(f"Admin not found for campaign {campaign.get('_id')}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Admin not found for campaign"
+            )
+            
+        # Get vector store ID from admin
+        vector_store_id = admin.get("vector_store_id")
+        logger.info(f"[REQ-{request_id}] Admin vector store ID: {vector_store_id}")
+
         # Process message with OpenAI
         try:
             if not student.get('thread_id'):
@@ -238,24 +253,31 @@ async def handle_email_webhook(
             if not campaign_assistant_id:
                 logger.warning(f"[REQ-{request_id}] Campaign has no assistant_id. Will need to create one.")
             
-            # Get admin who created the campaign
-            admin_id = campaign.get("admin_id")
-            if admin_id:
-                logger.info(f"[REQ-{request_id}] Looking up admin {admin_id} for assistant_id")
-                admin = await db.db.admin_users.find_one({"_id": ObjectId(admin_id)})
-                if admin and admin.get("assistant_id"):
-                    logger.info(f"[REQ-{request_id}] Found admin's assistant_id: {admin.get('assistant_id')}")
-                else:
-                    logger.warning(f"[REQ-{request_id}] Admin has no assistant_id")
-            
-            # For now, just log that we're using the default
-            logger.info(f"[REQ-{request_id}] Will use default assistant: asst_re59LKPfW1Fya4rwuoxVHKOa")
-
-            logger.info("Sending message to OpenAI for processing")   
-            assistant_id = campaign.get("assistant_id") or "asst_re59LKPfW1Fya4rwuoxVHKOa"
-            logger.info(f"[REQ-{request_id}] Thread ID: {thread_id}, Assistant ID: {assistant_id}")
+            # Get assistant ID with proper fallbacks
+            assistant_id = campaign.get("assistant_id") or admin.get("assistant_id") or "asst_re59LKPfW1Fya4rwuoxVHKOa"
+            logger.info(f"Using assistant ID: {assistant_id}")
             logger.info(f"Message content (first 100 chars): {text_content[:100] if text_content else ''}")
             
+            # If vector store exists, attach it to the thread for this run
+            thread_tool_resources = None
+            if vector_store_id:
+                logger.info(f"Attaching vector store {vector_store_id} to thread {thread_id}")
+                thread_tool_resources = {
+                    "file_search": {
+                        "vector_store_ids": [vector_store_id]
+                    }
+                }
+                
+                # Update the thread with the vector store (ensures it's attached for this run)
+                await openai_service.make_request(
+                    method="POST",
+                    url=f"{openai_service.base_url}/threads/{thread_id}",
+                    headers=openai_service.headers,
+                    data={"tool_resources": thread_tool_resources}
+                )
+
+            # Process message with OpenAI
+            logger.info(f"Processing message with assistant {assistant_id} and thread {thread_id}")
             response = await openai_service.process_message(
                 thread_id=thread_id,
                 message=text_content.strip(),
@@ -263,6 +285,7 @@ async def handle_email_webhook(
                 run_handler=lambda tool_calls: handle_student_tool_calls(
                     tool_calls, student, campaign_service
                 ),
+                thread_tool_resources=thread_tool_resources
             )
             
             # Send the response back to the student via email
@@ -291,6 +314,7 @@ async def handle_email_webhook(
                 "status": "sent",
                 "timestamp": datetime.utcnow(),
                # "assistant_id": campaign.get("assistant_id")  # Add the assistant_id here
+                "vector_store_used": bool(vector_store_id)
 
             }
         )
@@ -318,35 +342,71 @@ async def handle_student_tool_calls(
     tool_calls: List[Dict], student: Dict, campaign_service: CampaignService
 ) -> List[Dict]:
     """
-    Processes function calls requested by the OpenAI assistant for student interactions.
+    Processes tool calls for student interactions.
+    Students should ONLY have access to file_search, not admin functions.
+    Any function calls will be rejected with an appropriate error message.
     """
     logger.info(f"Handling student tool calls: {json.dumps(tool_calls, indent=2)}")
     
     tool_outputs = []
     for tool_call in tool_calls:
         try:
-            function_name = tool_call["function"]["name"]
-            arguments = json.loads(tool_call["function"]["arguments"])
-            logger.info(
-                f"Handling student function call: {function_name} with arguments: {arguments}"
-            )
+            tool_type = tool_call.get("type")
+            tool_call_id = tool_call.get("id")
             
-            # Add handlers for your functions here
-            # For file_search, you don't need to do anything as it's handled by the Assistant API
+            logger.info(f"Processing student tool call type: {tool_type}, id: {tool_call_id}")
             
-            # Add default output for unhandled functions
-            tool_outputs.append(
-                {
-                    "tool_call_id": tool_call["id"],
-                    "output": json.dumps({"status": "success", "message": "Tool call processed"}),
-                }
-            )
+            # Handle file_search tool calls - these are fine for students to use
+            if tool_type == "file_search":
+                # Log that file search was used
+                logger.info(f"File search tool used in student interaction")
+                
+                # For file_search, we don't need to provide outputs
+                # The OpenAI API handles file search internally
+                
+                # Optionally record file search usage in the database if needed
+                await db.db.interactions.update_one(
+                    {"student_id": str(student["_id"])},
+                    {"$set": {"used_file_search": True}},
+                    upsert=False
+                )
+            
+            # Reject any function calls - students shouldn't be able to use these
+            elif tool_type == "function":
+                function_name = tool_call.get("function", {}).get("name")
+                logger.warning(f"Student attempted to use restricted function: {function_name}")
+                
+                # Return an error message indicating the function is not available to students
+                tool_outputs.append(
+                    {
+                        "tool_call_id": tool_call_id,
+                        "output": json.dumps({
+                            "error": "This function is not available for student use.",
+                            "status": "access_denied"
+                        }),
+                    }
+                )
+            
+            # Handle any other tool types (future-proofing)
+            else:
+                logger.warning(f"Unknown tool type requested by student: {tool_type}")
+                tool_outputs.append(
+                    {
+                        "tool_call_id": tool_call_id,
+                        "output": json.dumps({
+                            "error": "This tool is not available for student use.",
+                            "status": "access_denied"
+                        }),
+                    }
+                )
             
         except Exception as e:
             logger.error(f"Error handling student tool call: {str(e)}")
+            # Always include the tool_call_id in the error response
+            tool_call_id = tool_call.get("id", "unknown_id")
             tool_outputs.append(
                 {
-                    "tool_call_id": tool_call["id"],
+                    "tool_call_id": tool_call_id,
                     "output": json.dumps({"error": str(e)}),
                 }
             )

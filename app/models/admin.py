@@ -26,6 +26,7 @@ class Admin(AdminBase):
     created_at: datetime
     assistant_id: Optional[str] = None #TODO: should not be None 
     thread_id: Optional[str] = None
+    vector_store_id: Optional[str] = None
 
     class Config:
         from_attributes = True # tell Pydantic to read data from dict or object(enabled by this setting)
