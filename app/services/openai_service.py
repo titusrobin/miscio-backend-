@@ -465,7 +465,12 @@ class OpenAIService(BaseAPIService):
         try:
             data = {"name": name}
             if file_ids:
+                # Ensure file_ids is a list
+                if not isinstance(file_ids, list):
+                    file_ids = [file_ids]
                 data["file_ids"] = file_ids
+                
+            logger.info(f"Creating vector store with data: {json.dumps(data)}")
                 
             # Request to create vector store
             response = await self.make_request(
@@ -474,6 +479,11 @@ class OpenAIService(BaseAPIService):
                 headers=self.headers,
                 data=data
             )
+
+            # Validate response
+            if not response:
+                logger.error("Empty response from vector store creation API")
+                raise Exception("Empty response from vector store creation API")
             
             vector_store_id = response.get("id")
             logger.info(f"Vector store created: {vector_store_id}")

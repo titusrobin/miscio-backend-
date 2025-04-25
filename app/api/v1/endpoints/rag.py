@@ -59,15 +59,47 @@ async def upload_file(
         
         # Check if admin already has a vector store
         admin_data = await db.db.admin_users.find_one({"_id": current_admin.id})
-        vector_store_id = admin_data.get("vector_store_id")
-        
-        if not vector_store_id:
-            # Create a new vector store
-            vector_store = await openai_service.create_vector_store(
-                name=vs_name,
-                file_ids=[openai_file["id"]]
+        if not admin_data:
+            logger.error(f"Admin with ID {current_admin.id} not found in database")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Admin user not found"
             )
-            vector_store_id = vector_store["id"]
+
+        vector_store_id = admin_data.get("vector_store_id")
+
+        if not vector_store_id:
+            try:
+                # Create a new vector store
+                logger.info(f"Creating new vector store with name: {vs_name} and file ID: {openai_file['id']}")
+                vector_store = await openai_service.create_vector_store(
+                    name=vs_name,
+                    file_ids=[openai_file["id"]]
+                )
+                
+                if not vector_store:
+                    logger.error("Vector store creation returned None")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to create vector store: received null response"
+                    )
+                    
+                if "id" not in vector_store:
+                    logger.error(f"Vector store response missing 'id' field: {vector_store}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Vector store creation response missing 'id' field"
+                    )
+                    
+                vector_store_id = vector_store["id"]
+                logger.info(f"Created new vector store with ID: {vector_store_id}")
+                
+            except Exception as vs_error:
+                logger.error(f"Error creating vector store: {str(vs_error)}", exc_info=True)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to create vector store: {str(vs_error)}"
+                )
             
             # Save vector store ID to admin record
             await db.db.admin_users.update_one(
