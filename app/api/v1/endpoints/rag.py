@@ -8,6 +8,7 @@ from app.models.admin import Admin
 from app.services.openai_service import OpenAIService
 from app.db.mongodb import db
 from datetime import datetime
+from bson import ObjectId 
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -59,6 +60,11 @@ async def upload_file(
         
         # Check if admin already has a vector store
         admin_data = await db.db.admin_users.find_one({"_id": current_admin.id})
+        
+        if not admin_data:
+            logger.info(f"Admin not found by string ID, trying ObjectId")
+            admin_data = await db.db.admin_users.find_one({"_id": ObjectId(current_admin.id)})
+        
         if not admin_data:
             logger.error(f"Admin with ID {current_admin.id} not found in database")
             raise HTTPException(
