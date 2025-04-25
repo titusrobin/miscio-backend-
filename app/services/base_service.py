@@ -44,32 +44,13 @@ class BaseAPIService:
         """
         client = await self.get_client()
         try:
-            formatted_params = {}
-            if params:  
-                for key, value in params.items():
-                    if isinstance(value, list):
-                    # Use the repeat approach - each value gets its own param instance
-                        for i, item in enumerate(value):
-                            formatted_params[f"{key}[{i}]"] = item
-                    else:
-                        formatted_params[key] = value
-
-            # Log the request details before sending
-            logger.info(f"Preparing to send {method} request to: {url}")
-            logger.info(f"Request headers: {headers}")
-            logger.info(f"Request params: {formatted_params}")
-            if data:
-                logger.info(f"Request data: {data}")
-
             response = await client.request(
                 method=method,
                 url=url,
                 headers=headers,
                 json=data,  
-                params=formatted_params
+                params=params
             )
-            logger.info(f"Full request URL: {response.request.url}")
-
             response.raise_for_status() # raise an error if the response status code is not 200-299
             
             return response.json()

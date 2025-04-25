@@ -281,7 +281,7 @@ class OpenAIService(BaseAPIService):
                             method="GET",
                             url=f"{self.base_url}/threads/{thread_id}/runs/{run_id}/steps",
                             headers=self.headers,
-                            params={"include[]": "step_details.tool_calls.file_search.results.content"}
+                            #params={"include[]": "step_details.tool_calls.file_search.results.content"}
 
                         )
                         
