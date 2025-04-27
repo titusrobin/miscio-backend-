@@ -271,6 +271,41 @@ async def create_message(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
 
+@router.put("/threads/{thread_id}/title")
+async def update_thread_title(
+    thread_id: str,
+    title_data: dict,
+    current_admin: Admin = Depends(get_current_admin_user)
+):
+    """Update the title of a thread."""
+    logger.info(f"PUT /threads/{thread_id}/title - Updating title")
+    try:
+        title = title_data.get("title")
+        if not title:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Title is required"
+            )
+        
+        result = await db.db.threads.update_one(
+            {"id": thread_id, "admin_id": str(current_admin.id)},
+            {"$set": {"title": title}}
+        )
+        
+        if result.modified_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Thread not found or unauthorized"
+            )
+        
+        return {"success": True, "title": title}
+    
+    except Exception as e:
+        logger.error(f"Error updating thread title: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 
 
