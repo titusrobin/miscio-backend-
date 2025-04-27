@@ -9,9 +9,11 @@ class Campaign(BaseModel):
     id: str = Field(default_factory=lambda: str(ObjectId()))
     description: str
     assistant_id: str
+    thread_id: Optional[str] = None 
     status: str = "active"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     admin_id: str  
 
     class Config:
         json_encoders = {ObjectId: str}
+

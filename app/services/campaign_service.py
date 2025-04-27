@@ -25,7 +25,7 @@ class CampaignService:
         self.sendgrid_service = sendgrid_service
         self.db = database
 
-    async def _create_campaign_in_db(self, campaign: str, admin_id: str, session) -> Dict:
+    async def _create_campaign_in_db(self, campaign: str, admin_id: str, thread_id: str, session) -> Dict:
         """
         Helper method to create a campaign in the database within a transaction.
         """
@@ -40,6 +40,7 @@ class CampaignService:
         campaign_data = {
             "description": campaign,
             "admin_id": admin_id,
+            "thread_id": thread_id,
             "status": "active",
             "created_at": datetime.utcnow(),
         }
@@ -90,15 +91,15 @@ class CampaignService:
         logger.debug(f"Recorded {interaction_type} interaction for student {student_id}")
         return interaction_data
 
-    async def create_campaign(self, campaign: str, admin_id: str) -> Dict:
+    async def create_campaign(self, campaign: str, admin_id: str, thread_id: str = None) -> Dict:
         """
         Creates a new campaign and initializes student outreach
         """
-        logger.info(f"Creating new campaign: {campaign}")
+        logger.info(f"Creating new campaign: {campaign} in thread: {thread_id}")
         try:
             async with await self.db.client.start_session() as session:
                 async with session.start_transaction():
-                    campaign_data = await self._create_campaign_in_db(campaign, admin_id, session)
+                    campaign_data = await self._create_campaign_in_db(campaign, admin_id, thread_id, session)
 
                     # student outreach 
                     students = await self.db.students.find({}, session=session).to_list(length=None) 
@@ -149,45 +150,72 @@ class CampaignService:
                 detail=f"Failed to create campaign: {str(e)}",
             )
 
-    async def query_student_chats(self, query: str, limit: int = 100) -> List[Dict]:
+    
+    async def query_student_chats(self, query: str = None, thread_id: str = None, limit: int = 25) -> List[Dict]:
         """
-        Search through student chat histories
+        Get student chat histories for campaigns associated with a thread.
+        Returns the latest interactions without status filtering.
         """
         try:
-            await self.db.interactions.create_index([("message", "text")])
- 
-            # Perform text search
-            cursor = (
-                self.db.interactions.find(
-                    {"$text": {"$search": query}}, {"score": {"$meta": "textScore"}}
-                )
-                .sort([("score", {"$meta": "textScore"})])
-                .limit(limit)
-            )
-
+            filter_query = {}
+            
+            if thread_id:
+                # Find ALL campaigns associated with this thread (regardless of status)
+                campaigns = await self.db.campaigns.find({"thread_id": thread_id}).to_list(length=None)
+                
+                if campaigns:
+                    campaign_ids = [str(campaign["_id"]) for campaign in campaigns]
+                    logger.info(f"Found {len(campaign_ids)} campaigns for thread {thread_id}")
+                    filter_query["campaign_id"] = {"$in": campaign_ids}
+                else:
+                    logger.warning(f"No campaigns found for thread {thread_id}")
+                    # Return empty list if no campaigns found for this thread
+                    return []
+            
+            # Simple time-based retrieval of latest interactions
+            cursor = self.db.interactions.find(filter_query).sort("timestamp", -1).limit(limit)
+            
             results = []
             async for interaction in cursor:
-                student = await self.db.students.find_one(
-                    {"_id": interaction["student_id"]}
-                )
-
-                campaign = await self.db.campaigns.find_one(
-                    {"_id": interaction["campaign_id"]}
-                )
-
-                results.append(
-                    {
-                        "student_name": f"{student['first_name']} {student['last_name']}",
-                        "campaign_description": (
-                            campaign["description"] if campaign else "Unknown Campaign"
-                        ),
-                        "message": interaction["message"],
-                        "timestamp": interaction["timestamp"],
-                        "type": interaction["type"],
-                    }
-                )
-
-            return results
+                # Safely get student and campaign information
+                student = None
+                campaign = None
+                
+                if "student_id" in interaction and interaction["student_id"]:
+                    student = await self.db.students.find_one(
+                        {"_id": interaction["student_id"]}
+                    )
+                
+                if "campaign_id" in interaction and interaction["campaign_id"]:
+                    campaign = await self.db.campaigns.find_one(
+                        {"_id": interaction["campaign_id"]}
+                    )
+                
+                # Build result with proper null checks
+                result = {
+                    "message": interaction.get("message", ""),
+                    "timestamp": interaction.get("timestamp", datetime.utcnow()),
+                    "type": interaction.get("type", "unknown"),
+                    "contact_method": interaction.get("contact_method", "unknown"),
+                    "status": interaction.get("status", "unknown"),
+                }
+                
+                # Add student info if available
+                if student:
+                    result["student_name"] = f"{student.get('first_name', '')} {student.get('last_name', '')}".strip()
+                else:
+                    result["student_name"] = "Unknown Student"
+                
+                # Add campaign info if available
+                if campaign:
+                    result["campaign_description"] = campaign.get("description", "Unknown Campaign")
+                else:
+                    result["campaign_description"] = "Unknown Campaign"
+                
+                results.append(result)
+            
+            # Return results in chronological order (oldest to newest)
+            return results[::-1]
 
         except Exception as e:
             logger.error(f"Error querying student chats: {str(e)}")

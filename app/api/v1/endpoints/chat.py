@@ -101,7 +101,7 @@ async def process_message(
             assistant_id=current_admin.assistant_id,
             # Lambda function - compact way to define a function without naming it.
             run_handler = lambda tool_calls: handle_tool_calls( # defined but NOT executed unless called, this is not like depends(), we're passing the function itself 
-                tool_calls, current_admin, campaign_service
+                tool_calls, current_admin, campaign_service, current_admin.thread_id
             ),
         )
 
@@ -227,7 +227,7 @@ async def create_message(
             message=message["content"],
             assistant_id=current_admin.assistant_id,
             run_handler=lambda tool_calls: handle_tool_calls(
-                tool_calls, current_admin, campaign_service
+                tool_calls, current_admin, campaign_service, thread_id
             ),
         )
 
@@ -277,7 +277,7 @@ async def create_message(
 # =====================================================================
 #================================Utils=================================
 async def handle_tool_calls(
-    tool_calls: List[Dict], current_admin: Admin, campaign_service: CampaignService
+    tool_calls: List[Dict], current_admin: Admin, campaign_service: CampaignService, thread_id: str
 ) -> List[Dict]:
     """
     Processes function calls requested by the OpenAI assistant and returns the results.
@@ -328,6 +328,7 @@ async def handle_tool_calls(
                 result = await campaign_service.create_campaign(
                     campaign=arguments["campaign_description"],
                     admin_id=current_admin.id,
+                    thread_id=thread_id
                 )
                 tool_outputs.append(
                     {
@@ -336,6 +337,8 @@ async def handle_tool_calls(
                             {
                                 "status": "success",
                                 "message": f"Campaign started successfully with description: {arguments['campaign_description']}",
+                                "campaign_id": result.get("id"),
+                                "thread_id": thread_id
                             }
                         ),
                     }
@@ -343,7 +346,8 @@ async def handle_tool_calls(
 
             elif function_name == "query_student_chats":
                 chat_results = await campaign_service.query_student_chats(
-                    query=arguments["query"]
+                    query=arguments.get("query", ""),
+                    thread_id=thread_id
                 )
                 tool_outputs.append(
                     {

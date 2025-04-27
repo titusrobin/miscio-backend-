@@ -17,19 +17,22 @@ class CampaignBase(BaseModel):
 
 
 class CampaignCreate(CampaignBase):
-    pass
+    thread_id: Optional[str] = None
 
 
 class CampaignUpdate(CampaignBase):
     status: Optional[str]
+    thread_id: Optional[str] = None
 
 
 class CampaignResponse(CampaignBase):
     id: str
     assistant_id: str
+    thread_id: Optional[str] = None 
     status: str
     created_at: datetime
     admin_id: str
 
     class Config:
         from_attributes = True
+
