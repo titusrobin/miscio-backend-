@@ -194,7 +194,7 @@ class CampaignService:
                 # Build result with proper null checks
                 result = {
                     "message": interaction.get("message", ""),
-                    "timestamp": interaction.get("timestamp", datetime.utcnow()),
+                    "timestamp": interaction.get("timestamp", datetime.utcnow()).isoformat(),
                     "type": interaction.get("type", "unknown"),
                     "contact_method": interaction.get("contact_method", "unknown"),
                     "status": interaction.get("status", "unknown"),
