@@ -102,8 +102,8 @@ class CampaignService:
                     campaign_data = await self._create_campaign_in_db(campaign, admin_id, thread_id, session)
 
                     # student outreach 
-                    students = await self.db.students.find({}, session=session).to_list(length=None) 
-                    logger.info(f"Found {len(students)} active students")
+                    students = await self.db.students.find({"admin_id": admin_id, "status": "active"}, session=session).to_list(length=None) 
+                    logger.info(f"Found {len(students)} active students for admin {admin_id}")
 
                     for student in students: 
                         try:
@@ -135,7 +135,8 @@ class CampaignService:
                                 contact_method=contact_method,
                                 email_subject="Message from Miscio Assistant" if contact_method == "email" else None,
                                 assistant_id=campaign_data.get("assistant_id"),
-                                session=session
+                                session=session,
+                                admin_id=admin_id
                             )
                         except Exception as e:
                             logger.error(f"Error processing student {student['_id']}: {str(e)}")

@@ -204,7 +204,10 @@ async def handle_email_webhook(
         logger.info(f"[REQ-{request_id}] Student thread_id: {student_thread_id}")
         
         # Get active campaign
-        campaign = await db.db.campaigns.find_one({"status": "active"})
+        campaign = await db.db.campaigns.find_one({
+            "status": "active", 
+            "admin_id": str(student["admin_id"])
+        })
         if not campaign:
             logger.warning("No active campaign found")
             raise HTTPException(

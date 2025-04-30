@@ -17,4 +17,5 @@ class Student(BaseModel):
     status: str = "active"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     thread_id: Optional[str] = None
+    admin_id: str
     #TODO: mongodb has thread_id - need? 
