@@ -38,6 +38,10 @@ class OpenAIService(BaseAPIService):
                         "parameters": {
                             "type": "object",
                             "properties": { # JSON Schema to define inputs function needs
+                                "title": {  # Add this property
+                                "type": "string",
+                                "description": "A clear, concise title for the campaign that will be used as the email subject line"
+                            },
                                 "campaign_purpose": {
                                 "type": "string",
                                 "description": "The primary goal and intent of this campaign (e.g., 'introduce a new resource', 'remind about deadlines', 'gather feedback')"
@@ -66,7 +70,7 @@ class OpenAIService(BaseAPIService):
                                 "default": ""
                             }
                             },
-                            "required": ["campaign_purpose", "campaign_details", "key_points"]
+                            "required": ["title", "campaign_purpose", "campaign_details", "key_points"]
                         }
                     }
                 },

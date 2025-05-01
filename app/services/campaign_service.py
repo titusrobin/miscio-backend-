@@ -47,6 +47,7 @@ class CampaignService:
 
         # Create campaign data with enhanced fields
         campaign_data = {
+            "title": campaign.get("title", campaign.get("purpose", "Important Announcement")),
             "description": campaign.get("details", ""),  # Maintain backward compatibility
             "purpose": campaign.get("purpose", ""),
             "audience": campaign.get("audience", "all students"),
@@ -95,7 +96,7 @@ class CampaignService:
         }
         # Add email subject if provided or if contact method is email
         if email_subject or contact_method == "email":
-            interaction_data["email_subject"] = email_subject or "Message from Miscio Assistant"
+            interaction_data["email_subject"] = email_subject or campaign.get("title", "Message from Miscio Assistant")  # Update this line
         
         # Add assistant ID if provided
         if assistant_id:
@@ -186,7 +187,7 @@ class CampaignService:
                             if 'email' in student and student.get('preferred_contact_method') == 'email': 
                                 await self.sendgrid_service.send_message(
                                     to_email=student["email"],
-                                    subject=f"{campaign.get('purpose', 'Message from Miscio Assistant')}",
+                                    subject=campaign.get("title", campaign.get("purpose", "Message from Miscio Assistant")),
                                     message=initial_message,
                                     message_type="initial"
                                 )
@@ -411,7 +412,7 @@ class CampaignService:
             4. Communicates the key campaign information clearly
             5. Uses the specified tone ({campaign.get('tone', 'friendly and helpful')})
             
-            No need for any formal sign-offs.
+            No need for any formal sign-offs. DO NOT include any signature, sign-off, or name at the end. 
             """
             
             # Process the message with the OpenAI assistant
