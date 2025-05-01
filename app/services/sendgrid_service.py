@@ -17,17 +17,18 @@ class SendGridService:
         self.from_email = settings.SENDGRID_FROM_EMAIL
         self.from_name = settings.SENDGRID_FROM_NAME
         
-    async def send_message(self, to_email: str, subject: str, message: str):
+    async def send_message(self, to_email: str, subject: str, message: str, message_type: str = "initial"):
         """
         Sends an email message to a student.
         
         """
         try:
-            # Ensure subject has Re: prefix if it's a reply and doesn't already have it
-            if not subject.startswith("Re:") and subject.strip() != "": #TODO: fix multiple RE's 
-                subject = f"Re: {subject}"
-            elif subject.strip() == "":
+            # Only use Re: prefix for replies to student messages, not for new campaigns
+            if subject.strip() == "":
                 subject = "Message from Miscio Assistant"
+            elif message_type == "reply" and not subject.startswith("Re:"):
+                # Only add Re: if this is a reply to a student message
+                subject = f"Re: {subject}"
             
             # Fix the asterisks issue - simply remove them from the message
             message_plain = re.sub(r'\*\*(.*?)\*\*', r'\1', message)

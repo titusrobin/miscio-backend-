@@ -167,7 +167,7 @@ class CampaignService:
                             else:
                                 # Fallback if no assistant_id is available
                                 student_name = student.get('first_name', 'Student')
-                                initial_message = f"Hi {student_name}, regarding {campaign.get('purpose', 'our program')}. {campaign.get('key_points', '')} Please {campaign.get('call_to_action', 'let us know if you have questions')}. Best regards, Miscio Assistant"
+                                initial_message = f"Hi {student_name}, \n\n{campaign.get('key_points', '')} {campaign.get('call_to_action', 'let us know if you have questions')}"
                                 
                             logger.debug(f"Message for student {student['_id']}: '{initial_message[:100]}...'")
                             
@@ -175,8 +175,9 @@ class CampaignService:
                             if 'email' in student and student.get('preferred_contact_method') == 'email': 
                                 await self.sendgrid_service.send_message(
                                     to_email=student["email"],
-                                    subject=f"Re: {campaign.get('purpose', 'Message from Miscio Assistant')}",
-                                    message=initial_message
+                                    subject=f"{campaign.get('purpose', 'Message from Miscio Assistant')}",
+                                    message=initial_message,
+                                    message_type="initial"
                                 )
                                 contact_method = "email"
                             elif 'phone' in student:

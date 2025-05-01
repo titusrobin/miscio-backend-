@@ -295,7 +295,8 @@ async def handle_email_webhook(
             await sendgrid_service.send_message(
                 to_email=email_address,
                 subject=f"Re: {subject}",
-                message=response
+                message=response,
+                message_type="reply"
             )
             
         except Exception as e:
