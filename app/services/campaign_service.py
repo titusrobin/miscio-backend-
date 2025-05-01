@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from app.services.openai_service import OpenAIService
 from app.services.twilio_service import TwilioService
 from app.services.sendgrid_service import SendGridService  
+from bson import ObjectId
 
 import logging
 logger = logging.getLogger(__name__)
@@ -118,11 +119,20 @@ class CampaignService:
             async with await self.db.client.start_session() as session:
                 async with session.start_transaction():
                     campaign_data = await self._create_campaign_in_db(campaign, admin_id, thread_id, session)
-
-                    # Get admin data including assistant_id
-                    admin_data = await self.db.admin_users.find_one({"_id": admin_id}, session=session)
-                    assistant_id = admin_data.get("assistant_id") if admin_data else None
                     
+                    # Get admin data including assistant_id - with ObjectId fallback
+                    admin_data = await self.db.admin_users.find_one({"_id": admin_id}, session=session)
+                    
+                    # If not found, try with ObjectId
+                    if not admin_data:
+                        try:
+                            admin_data = await self.db.admin_users.find_one({"_id": ObjectId(admin_id)}, session=session)
+                            logger.info(f"Admin found using ObjectId conversion for {admin_id}")
+                        except Exception as e:
+                            logger.error(f"Error converting to ObjectId: {str(e)}")
+                    
+                    assistant_id = admin_data.get("assistant_id") if admin_data else None
+
                     if not assistant_id:
                         logger.warning(f"No assistant_id found for admin {admin_id}")
                         campaign_data["warning"] = "No assistant ID found for this admin"
