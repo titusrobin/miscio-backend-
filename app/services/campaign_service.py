@@ -417,7 +417,8 @@ class CampaignService:
             response = await self.openai_service.process_message(
                 thread_id=thread_id,
                 message=prompt,
-                assistant_id=assistant_id
+                assistant_id=assistant_id,
+                tool_calls=self._message_generation_handler
             )
             
             # Clean up the response if needed
@@ -443,3 +444,11 @@ class CampaignService:
             return fallback_message
         
     
+    async def _message_generation_handler(self, tool_calls):
+        """Simple handler for function calls during message generation.
+        Just logs what was called and returns empty outputs to avoid errors."""
+        
+        logger.info(f"Function called during message generation: {json.dumps(tool_calls, indent=2)}")
+        
+        # Return minimal valid outputs to satisfy the API
+        return [{"tool_call_id": call["id"], "output": "{}"} for call in tool_calls]
