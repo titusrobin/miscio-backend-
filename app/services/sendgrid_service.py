@@ -3,7 +3,7 @@ import logging
 import re  # Add this import
 from typing import Optional
 from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, Content
+from sendgrid.helpers.mail import Mail, Email, Content, Header
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,10 @@ class SendGridService:
         self.from_email = settings.SENDGRID_FROM_EMAIL
         self.from_name = settings.SENDGRID_FROM_NAME
         
-    async def send_message(self, to_email: str, subject: str, message: str, message_type: str = "initial"):
+    async def send_message(self, to_email: str, subject: str, message: str, message_type: str = "initial",
+                          in_reply_to: Optional[str] = None,
+                          references: Optional[str] = None,
+                          thread_index: Optional[str] = None):
         """
         Sends an email message to a student.
         
@@ -32,6 +35,8 @@ class SendGridService:
             
             # Fix the asterisks issue - simply remove them from the message
             message_plain = re.sub(r'\*\*(.*?)\*\*', r'\1', message)
+            message_plain = message_plain.replace('\n', '\r\n')
+
             
             # Create sender and mail object 
             from_email = Email(self.from_email, self.from_name)
@@ -45,6 +50,22 @@ class SendGridService:
             
             # Set the Reply-To header to reply@miscioapp.com
             mail.reply_to = Email("reply@reply.miscioapp.com", "Miscio Assistant")
+
+            # Add threading headers for replies
+            if message_type == "reply" and in_reply_to:
+                # Add In-Reply-To header
+                mail.add_header(Header("In-Reply-To", in_reply_to))
+                
+                # Add References header (includes the full chain)
+                if references:
+                    mail.add_header(Header("Refserences", references))
+                else:
+                    # If no references provided, use in_reply_to as the initial reference
+                    mail.add_header(Header("References", in_reply_to))
+                
+                # Add Microsoft Thread-Index for Outlook support
+                if thread_index:
+                    mail.add_header(Header("Thread-Index", thread_index))
             
             # Send the email
             sg = SendGridAPIClient(self.api_key)
