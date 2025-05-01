@@ -7,6 +7,7 @@ from app.services.openai_service import OpenAIService
 from app.services.twilio_service import TwilioService
 from app.services.sendgrid_service import SendGridService  
 from bson import ObjectId
+import json
 
 import logging
 logger = logging.getLogger(__name__)
