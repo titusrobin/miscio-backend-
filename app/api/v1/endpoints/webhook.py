@@ -151,14 +151,7 @@ async def handle_email_webhook(
         from_email = form_data.get("from")
         subject = form_data.get("subject", "")
         text_content = form_data.get("text", "")
-
-        # Extract threading headers
-        message_id = form_data.get("message-id", "")
-        in_reply_to = form_data.get("in-reply-to", "")
-        references = form_data.get("references", "")
-        thread_index = form_data.get("thread-index", "")
         
-        logger.info(f"[REQ-{request_id}] Extracted threading headers - Message-ID: {message_id}, In-Reply-To: {in_reply_to}")
         logger.info(f"[REQ-{request_id}] Extracted email details - From: {from_email}, Subject: {subject}")
 
         # Log message size
@@ -303,10 +296,7 @@ async def handle_email_webhook(
                 to_email=email_address,
                 subject=f"Re: {subject}",
                 message=response,
-                message_type="reply",
-                in_reply_to=message_id,         # Use the incoming Message-ID for In-Reply-To
-                references=references or message_id,  # Use existing references or the Message-ID
-                thread_index=thread_index   
+                message_type="reply"
             )
             
         except Exception as e:
