@@ -25,9 +25,16 @@ class CampaignService:
         self.sendgrid_service = sendgrid_service
         self.db = database
 
-    async def _create_campaign_in_db(self, campaign: str, admin_id: str, thread_id: str, session) -> Dict:
+    async def _create_campaign_in_db(self, campaign: dict, admin_id: str, thread_id: str, session) -> Dict:
         """
         Helper method to create a campaign in the database within a transaction.
+        Enhanced to store comprehensive campaign details.
+        
+        Args:
+            campaign: Dictionary containing comprehensive campaign information
+            admin_id: The ID of the admin creating the campaign
+            thread_id: The thread ID where the campaign was initiated
+            session: Database session for the transaction
         """
         # Deactivate existing campaigns
         await self.db.campaigns.update_many(
@@ -36,21 +43,27 @@ class CampaignService:
             session=session,
         )
 
-        # Create campaign data
+        # Create campaign data with enhanced fields
         campaign_data = {
-            "description": campaign,
+            "description": campaign.get("details", ""),  # Maintain backward compatibility
+            "purpose": campaign.get("purpose", ""),
+            "audience": campaign.get("audience", "all students"),
+            "tone": campaign.get("tone", "friendly and helpful"),
+            "key_points": campaign.get("key_points", ""),
+            "call_to_action": campaign.get("call_to_action", ""),
             "admin_id": admin_id,
             "thread_id": thread_id,
             "status": "active",
             "created_at": datetime.utcnow(),
         }
         
-        # Insert the campaign
+        # Insert the campaign with full details
         result = await self.db.campaigns.insert_one(
             campaign_data, session=session
         )
         campaign_data["id"] = str(result.inserted_id)
         
+        logger.info(f"Created campaign with ID {campaign_data['id']} and full details")
         return campaign_data
 
     async def _record_student_interaction(
@@ -91,7 +104,7 @@ class CampaignService:
         logger.debug(f"Recorded {interaction_type} interaction for student {student_id}")
         return interaction_data
 
-    async def create_campaign(self, campaign: str, admin_id: str, thread_id: str = None) -> Dict:
+    async def create_campaign(self, campaign: dict, admin_id: str, thread_id: str = None) -> Dict:
         """
         Creates a new campaign and initializes student outreach
         """
@@ -101,20 +114,63 @@ class CampaignService:
                 async with session.start_transaction():
                     campaign_data = await self._create_campaign_in_db(campaign, admin_id, thread_id, session)
 
-                    # student outreach 
-                    students = await self.db.students.find({"admin_id": admin_id, "status": "active"}, session=session).to_list(length=None) 
-                    logger.info(f"Found {len(students)} active students for admin {admin_id}")
+                    # Get admin data including assistant_id
+                    admin_data = await self.db.admin_users.find_one({"_id": admin_id}, session=session)
+                    assistant_id = admin_data.get("assistant_id") if admin_data else None
+                    
+                    if not assistant_id:
+                        logger.warning(f"No assistant_id found for admin {admin_id}")
+                        campaign_data["warning"] = "No assistant ID found for this admin"
+                    
+                    # Store assistant_id in campaign data
+                    await self.db.campaigns.update_one(
+                        {"_id": campaign_data["id"]},
+                        {"$set": {"assistant_id": assistant_id}},
+                        session=session
+                    )
+                    campaign_data["assistant_id"] = assistant_id
 
-                    for student in students: 
+                    # Find students based on target audience
+                    audience = campaign.get("audience", "all students")
+                    filter_query = {"admin_id": admin_id, "status": "active"}
+                    
+                    # Apply audience filtering if specific (not implemented yet, just a placeholder)
+                    if audience != "all students":
+                        # This could be expanded to filter by year, program, etc.
+                        logger.info(f"Targeting specific audience: {audience}")
+                        # Example: if audience == "first-year students":
+                        #     filter_query["year"] = "first" 
+                    
+                    # Retrieve targeted students
+                    students = await self.db.students.find(filter_query, session=session).to_list(length=None)
+                    logger.info(f"Found {len(students)} students matching audience criteria")
+
+                    # Tracking for summary
+                    successful_messages = 0
+                    failed_messages = 0
+
+                    for student in students:
                         try:
-                            initial_message = f"Hi {student['first_name']}, {campaign}" #TODO: make this dynamic
-                            logger.debug(f"Initial message for student {student['_id']}: '{initial_message}'")
+                            # Generate a personalized message using comprehensive context
+                            if assistant_id:
+                                initial_message = await self._generate_personalized_message(
+                                    campaign=campaign,
+                                    student=student,
+                                    assistant_id=assistant_id,
+                                    admin_id=admin_id
+                                )
+                            else:
+                                # Fallback if no assistant_id is available
+                                student_name = student.get('first_name', 'Student')
+                                initial_message = f"Hi {student_name}, regarding {campaign.get('purpose', 'our program')}. {campaign.get('key_points', '')} Please {campaign.get('call_to_action', 'let us know if you have questions')}. Best regards, Miscio Assistant"
+                                
+                            logger.debug(f"Message for student {student['_id']}: '{initial_message[:100]}...'")
                             
-                            # mode of contact
+                            # Determine contact method and send message
                             if 'email' in student and student.get('preferred_contact_method') == 'email': 
                                 await self.sendgrid_service.send_message(
                                     to_email=student["email"],
-                                    subject="Message from Miscio Assistant",
+                                    subject=f"Re: {campaign.get('purpose', 'Message from Miscio Assistant')}",
                                     message=initial_message
                                 )
                                 contact_method = "email"
@@ -127,20 +183,31 @@ class CampaignService:
                                 logger.warning(f"No valid contact method for student {student['_id']}")
                                 continue
                             
-                            # Record the outreach in db
+                            # Record the outreach in database
                             await self._record_student_interaction( 
                                 campaign_id=str(campaign_data["id"]),
                                 student_id=str(student["_id"]),
                                 message=initial_message,
                                 contact_method=contact_method,
-                                email_subject="Message from Miscio Assistant" if contact_method == "email" else None,
-                                assistant_id=campaign_data.get("assistant_id"),
+                                email_subject=f"Re: {campaign.get('purpose', 'Message from Miscio Assistant')}" if contact_method == "email" else None,
+                                assistant_id=assistant_id,
                                 session=session,
                                 admin_id=admin_id
                             )
+                            
+                            successful_messages += 1
+                            
                         except Exception as e:
                             logger.error(f"Error processing student {student['_id']}: {str(e)}")
+                            failed_messages += 1
                             continue
+
+                    # Add summary stats to campaign data
+                    campaign_data["summary"] = {
+                        "total_students": len(students),
+                        "successful_messages": successful_messages,
+                        "failed_messages": failed_messages
+                    }
 
                     return campaign_data
 
@@ -150,7 +217,6 @@ class CampaignService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to create campaign: {str(e)}",
             )
-
     
     async def query_student_chats(self, query: str = None, thread_id: str = None, limit: int = 25) -> List[Dict]:
         """
@@ -260,3 +326,104 @@ class CampaignService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to get campaign stats: {str(e)}",
             )
+    
+    async def _generate_personalized_message(
+    self, 
+    campaign: dict, 
+    student: dict, 
+    assistant_id: str,
+    admin_id: str
+) -> str:
+        """
+        Generate a personalized message for a student based on comprehensive campaign details.
+        Uses the OpenAI assistant to create a well-formatted, contextually relevant message.
+        
+        Args:
+            campaign: Dictionary containing comprehensive campaign information
+            student: Dictionary containing student information
+            assistant_id: ID of the OpenAI assistant to use for generation
+            admin_id: ID of the admin creating the campaign
+        
+        Returns:
+            Personalized message text
+        """
+        try:
+            # Extract student information
+            student_name = student.get('first_name', 'Student')
+            student_id = str(student.get('_id', ''))
+            
+            # Create a temporary thread for this message generation
+            thread_data = await self.openai_service.create_thread()
+            thread_id = thread_data["id"]
+            
+            # Fetch student interaction history
+            student_interactions = await self.db.interactions.find({
+                "student_id": student_id
+            }).sort("timestamp", -1).limit(3).to_list(length=None)
+            
+            # Format interaction history if available
+            history_text = ""
+            has_history = len(student_interactions) > 0
+            
+            if has_history:
+                history_text = "Previous conversation history:\n"
+                for interaction in reversed(student_interactions):  # Oldest to newest
+                    if interaction.get("type") == "response":
+                        history_text += f"Student: {interaction.get('message', '')}\n"
+                    else:
+                        history_text += f"Assistant: {interaction.get('message', '')}\n"
+            
+            # Construct the prompt for message generation
+            prompt = f"""
+            You are the Miscio Assistant writing to {student_name}.
+            
+            CAMPAIGN INFORMATION:
+            Purpose: {campaign.get('purpose', '')}
+            Details: {campaign.get('details', '')}
+            Target audience: {campaign.get('audience', 'all students')}
+            Tone to use: {campaign.get('tone', 'friendly and helpful')}
+            Key points to include: {campaign.get('key_points', '')}
+            Call to action: {campaign.get('call_to_action', '')}
+            
+            {"" if not has_history else history_text}
+            
+            Write a personalized message that:
+            1. Addresses the student by name
+            2. {'' if has_history else 'Introduces yourself and your purpose'}
+            3. {'' if not has_history else 'References previous interactions naturally'}
+            4. Communicates the key campaign information clearly
+            5. Uses the specified tone ({campaign.get('tone', 'friendly and helpful')})
+            
+            No need for any formal sign-offs.
+            """
+            
+            # Process the message with the OpenAI assistant
+            response = await self.openai_service.process_message(
+                thread_id=thread_id,
+                message=prompt,
+                assistant_id=assistant_id
+            )
+            
+            # Clean up the response if needed
+            message = response.strip()
+            
+            logger.info(f"Generated personalized message for {student_name}")
+            return message
+            
+        except Exception as e:
+            logger.error(f"Error generating personalized message: {str(e)}")
+            # Fall back to basic message if generation fails
+            fallback_message = f"Hi {student.get('first_name', 'Student')}, "
+            
+            if campaign.get('purpose'):
+                fallback_message += f"I'm reaching out about {campaign.get('purpose')}. "
+                
+            if campaign.get('key_points'):
+                fallback_message += f"{campaign.get('key_points')} "
+                
+            if campaign.get('call_to_action'):
+                fallback_message += f"Please {campaign.get('call_to_action')}."
+            
+            return fallback_message
+        
+    

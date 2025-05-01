@@ -359,19 +359,50 @@ async def handle_tool_calls(
                 f"Handling function call: {function_name} with arguments: {arguments}"
             )
 
-            if function_name == "run_campaign": # Execute the Appropriate Function
+            if function_name == "run_campaign":
+                # Extract comprehensive campaign details
+                campaign_purpose = arguments.get("campaign_purpose", "")
+                campaign_details = arguments.get("campaign_details", "")
+                target_audience = arguments.get("target_audience", "all students")
+                tone_and_style = arguments.get("tone_and_style", "friendly and helpful")
+                key_points = arguments.get("key_points", "")
+                call_to_action = arguments.get("call_to_action", "respond with any questions")
+                
+                # Combine all details into a comprehensive campaign description
+                campaign_description = {
+                    "purpose": campaign_purpose,
+                    "details": campaign_details,
+                    "audience": target_audience,
+                    "tone": tone_and_style,
+                    "key_points": key_points,
+                    "call_to_action": call_to_action,
+                    "thread_id": thread_id  # Include the thread_id for context
+                }
+                
+                # Log the comprehensive campaign details
+                logger.info(f"Creating campaign with detailed description: {json.dumps(campaign_description, indent=2)}")
+                
+                # Pass the enhanced campaign description to the campaign service
                 result = await campaign_service.create_campaign(
-                    campaign=arguments["campaign_description"],
+                    campaign=campaign_description,
                     admin_id=current_admin.id,
                     thread_id=thread_id
                 )
+                
+                # Prepare a detailed response
+                response_message = (
+                    f"Campaign started successfully! I've created personalized messages focused on "
+                    f"'{campaign_purpose}' with a {tone_and_style} tone. "
+                    f"Each message includes the key points you mentioned and encourages students to {call_to_action}."
+                )
+                
                 tool_outputs.append(
                     {
                         "tool_call_id": tool_call["id"],
                         "output": json.dumps(
                             {
                                 "status": "success",
-                                "message": f"Campaign started successfully with description: {arguments['campaign_description']}",
+                                "message": response_message,
                                 "campaign_id": result.get("id"),
                                 "thread_id": thread_id
                             }

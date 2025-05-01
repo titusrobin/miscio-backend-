@@ -34,21 +34,39 @@ class OpenAIService(BaseAPIService):
                     "type": "function",
                     "function": {
                         "name": "run_campaign",
-                        "description": "Run a campaign to send messages to students",
+                        "description": "Run a detailed campaign to send personalized messages to students on behalf of the school admin",
                         "parameters": {
                             "type": "object",
                             "properties": { # JSON Schema to define inputs function needs
-                                "campaign_type": {
-                                    "type": "string",
-                                    "enum": ["feedback", "reminder", "announcement"],
-                                    "description": "The type of campaign to run"
-                                },
-                                "campaign_description": {
-                                    "type": "string",
-                                    "description": "A brief description of what the campaign is about"
-                                }
+                                "campaign_purpose": {
+                                "type": "string",
+                                "description": "The primary goal and intent of this campaign (e.g., 'introduce a new resource', 'remind about deadlines', 'gather feedback')"
                             },
-                            "required": ["campaign_description"]
+                            "campaign_details": {
+                                "type": "string",
+                                "description": "Comprehensive description of the campaign with all important context and background information the admin wants us aware of"
+                            },
+                            "target_audience": {
+                                "type": "string",
+                                "description": "Which students this targets (e.g., 'all students', 'first-year students', 'students who haven't responded')",
+                                "default": "all students"
+                            },
+                            "tone_and_style": {
+                                "type": "string",
+                                "description": "How messages should sound (e.g., 'friendly', 'formal', 'encouraging', 'urgent')",
+                                "default": "friendly and helpful"
+                            },
+                            "key_points": {
+                                "type": "string",
+                                "description": "Essential information that must be included in the first message"
+                            },
+                            "call_to_action": {
+                                "type": "string",
+                                "description": "What students should do after reading (e.g., 'respond with questions', 'check a resource', 'complete a task')",
+                                "default": ""
+                            }
+                            },
+                            "required": ["campaign_purpose", "campaign_details", "key_points"]
                         }
                     }
                 },
@@ -81,13 +99,33 @@ class OpenAIService(BaseAPIService):
             # Configure the assistant with instructions and tools
             assistant_data = {
                 "name": f"Admin Assistant - {admin_id}",
-                "instructions": """You are an administrative assistant for Miscio. Your role is to help admins manage student communications and analyze feedback. You can:
-                1. Run campaigns to reach out to students using the run_campaign function
-                2. Query and analyze student chat histories using query_student_chats
-                3. Use the file_search tool to find relevant information in uploaded documents
+                "instructions": """You are an advanced administrative assistant for Miscio, specializing in student communications and campaign management to help with admin care and support students. 
+                Your role is to help admins effectively communicate with students and analyze communications.
 
-                Keep responses professional but friendly. Always use the appropriate function when the admin wants to start a campaign or analyze student feedback.
-                When students ask questions, use the file_search tool to find relevant information and provide comprehensive answers based on the documents.""",
+                CAMPAIGN CREATION GUIDANCE:
+                When an admin wants to create a campaign to reach out to students:
+                1. Thoroughly analyze the full context of what they're trying to achieve
+                2. Extract detailed information about:
+                - The campaign's primary purpose and goals
+                - Key information that needs to be communicated
+                - Preferred tone and communication style
+                - Any specific call to action for students
+                3. Consider the entire conversation history for context
+                4. Reference any uploaded documents when relevant
+                5. Use the run_campaign function with comprehensive details
+
+                FILE AND KNOWLEDGE MANAGEMENT:
+                1. Use the file_search tool to reference uploaded documents
+                2. Incorporate relevant document information into your responses
+                3. Consider document content when creating campaigns
+                4. Students asking questions should only have their questions answered using file_search, don't need to allow students for other tools. 
+
+                STUDENT INTERACTION ANALYSIS:
+                1. Use query_student_chats to analyze student conversations
+                2. Identify patterns, common questions, and feedback themes
+                3. Provide insights to help admins improve communications
+                
+                Always maintain a professional, helpful tone. Ensure all campaign messages will be personally relevant to students and reflect the admin's communication goals.""",
                 "model": settings.OPENAI_ASSISTANT_MODEL,
                 "tools": tools
             }
