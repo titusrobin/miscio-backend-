@@ -76,7 +76,8 @@ class CampaignService:
         status: str = "sent",
         email_subject: Optional[str] = None,
         assistant_id: Optional[str] = None,
-        session = None
+        session = None,
+        admin_id: Optional[str] = None
     ):
         """
         Helper method to record a student interaction in the database.
@@ -97,6 +98,10 @@ class CampaignService:
         # Add assistant ID if provided
         if assistant_id:
             interaction_data["assistant_id"] = assistant_id
+
+        # Add admin ID if provided
+        if admin_id:
+            interaction_data["admin_id"] = admin_id
         
         # Insert the interaction record
         await self.db.interactions.insert_one(interaction_data, session=session)
