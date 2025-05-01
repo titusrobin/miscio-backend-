@@ -418,7 +418,7 @@ class CampaignService:
                 thread_id=thread_id,
                 message=prompt,
                 assistant_id=assistant_id,
-                tool_calls=self._message_generation_handler
+                run_handler=self._message_generation_handler
             )
             
             # Clean up the response if needed
