@@ -187,7 +187,7 @@ class CampaignService:
                             if 'email' in student and student.get('preferred_contact_method') == 'email': 
                                 await self.sendgrid_service.send_message(
                                     to_email=student["email"],
-                                    subject=campaign.get("title", campaign.get("purpose", "Message from Miscio Assistant")),
+                                    subject=campaign.get("title","Message from Miscio Assistant"),
                                     message=initial_message,
                                     message_type="initial"
                                 )
@@ -207,7 +207,7 @@ class CampaignService:
                                 student_id=str(student["_id"]),
                                 message=initial_message,
                                 contact_method=contact_method,
-                                email_subject=f"Re: {campaign.get('purpose', 'Message from Miscio Assistant')}" if contact_method == "email" else None,
+                                email_subject=campaign.get("title", "Message from Miscio Assistant") if contact_method == "email" else None,
                                 assistant_id=assistant_id,
                                 session=session,
                                 admin_id=admin_id
