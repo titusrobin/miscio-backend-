@@ -393,7 +393,8 @@ class CampaignService:
             
             # Construct the prompt for message generation
             prompt = f"""
-            You are the Miscio Assistant writing to {student_name}.
+            You are writing a personal message to {student_name}. Do NOT call any functions other than file search. 
+            Only respond with the message text that should be sent to the student.
             
             CAMPAIGN INFORMATION:
             Purpose: {campaign.get('purpose', '')}
