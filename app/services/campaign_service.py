@@ -393,7 +393,7 @@ class CampaignService:
             
             # Construct the prompt for message generation
             prompt = f"""
-            You are writing a personal message to {student_name}. Do NOT call any functions other than file search. 
+            You are writing a personal message to {student_name}. Do NOT call any functions other than the file search. 
             Only respond with the message text that should be sent to the student.
             
             CAMPAIGN INFORMATION:
