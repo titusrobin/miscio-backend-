@@ -391,26 +391,10 @@ class CampaignService:
                     else:
                         history_text += f"Assistant: {interaction.get('message', '')}\n"
             
-            # Get admin's vector store for file search
-            admin_data = await self.db.admin_users.find_one({"_id": ObjectId(admin_id)})
-            vector_store_id = admin_data.get("vector_store_id") if admin_data else None
-            
-            # Set up thread tool resources for file search
-            thread_tool_resources = None
-            if vector_store_id:
-                thread_tool_resources = {
-                    "file_search": {
-                        "vector_store_ids": [vector_store_id]
-                    }
-                }
-
             # Construct the prompt for message generation
             prompt = f"""
-            You are writing a personalized message to send directly to a student named {student_name}.
-
+            You are the Miscio Assistant writing to {student_name}.
             
-            IMPORTANT: Do NOT create campaigns, run functions, or take any actions. Only write a message.
-
             CAMPAIGN INFORMATION:
             Purpose: {campaign.get('purpose', '')}
             Details: {campaign.get('details', '')}
@@ -419,27 +403,24 @@ class CampaignService:
             Key points to include: {campaign.get('key_points', '')}
             Call to action: {campaign.get('call_to_action', '')}
             
-            {"PREVIOUS CONVERSATIONS:\n" + history_text if has_history else "This is the first message to this student."}
-
-            TASK: Write a direct message TO {student_name} (not about them) that:
-            1. Addresses {student_name} by name
-            2. {"References our previous conversations naturally" if has_history else "Introduces yourself as the Miscio Assistant"}
-            3. Communicates the campaign information clearly
-            4. Uses a {campaign.get('tone', 'friendly and helpful')} tone
-            5. Includes the call to action
-            6. Is ready to send directly as an email
-
-            You can use file search to reference any relevant documents.
-
-            Write ONLY the message content - no explanations, no "Here's the message", just the actual message text that will be sent to {student_name}."""
-                        
+            {"" if not has_history else history_text}
+            
+            Write a personalized message that:
+            1. Addresses the student by name
+            2. {'' if has_history else 'Introduces yourself and your purpose'}
+            3. {'' if not has_history else 'References previous interactions naturally'}
+            4. Communicates the key campaign information clearly
+            5. Uses the specified tone ({campaign.get('tone', 'friendly and helpful')})
+            
+            No need for any formal sign-offs. DO NOT include any signature, sign-off, or name at the end. 
+            """
+            
             # Process the message with the OpenAI assistant
             response = await self.openai_service.process_message(
                 thread_id=thread_id,
                 message=prompt,
                 assistant_id=assistant_id,
-                run_handler=None,
-                thread_tool_resources=thread_tool_resources #TODO: do we need this for file search? 
+                run_handler=self._message_generation_handler
             )
             
             # Clean up the response if needed
@@ -465,11 +446,11 @@ class CampaignService:
             return fallback_message
         
     
-    # async def _message_generation_handler(self, tool_calls):
-    #     """Simple handler for function calls during message generation.
-    #     Just logs what was called and returns empty outputs to avoid errors."""
+    async def _message_generation_handler(self, tool_calls):
+        """Simple handler for function calls during message generation.
+        Just logs what was called and returns empty outputs to avoid errors."""
         
-    #     logger.info(f"Function called during message generation: {json.dumps(tool_calls, indent=2)}")
+        logger.info(f"Function called during message generation: {json.dumps(tool_calls, indent=2)}")
         
-    #     # Return minimal valid outputs to satisfy the API
-    #     return [{"tool_call_id": call["id"], "output": "{}"} for call in tool_calls]
+        # Return minimal valid outputs to satisfy the API
+        return [{"tool_call_id": call["id"], "output": "{}"} for call in tool_calls]
