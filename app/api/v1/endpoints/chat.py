@@ -94,6 +94,15 @@ async def process_message(
             f"Admin ID: {current_admin.id}, Thread ID: {current_admin.thread_id}, Assistant ID: {current_admin.assistant_id}"
         )
 
+        # Generate loading messages immediately (for testing - just log them)
+        try:
+            loading_messages = await openai_service.generate_loading_messages(content)
+            logger.info(f"Generated loading messages: {loading_messages}")
+        except Exception as e:
+            logger.error(f"Failed to generate loading messages: {str(e)}")
+            loading_messages = openai_service._get_fallback_messages()
+            logger.info(f"Using fallback messages: {loading_messages}")
+
         # Process the message with function calling support
         response = await openai_service.process_message(
             thread_id=current_admin.thread_id,
@@ -222,6 +231,17 @@ async def create_message(
 ):
     logger.info(f"POST /threads/{thread_id}/messages - Creating new message in thread")
     try:
+        content = message.get("content", "")
+        
+        # Generate loading messages immediately (for testing - just log them)
+        try:
+            loading_messages = await openai_service.generate_loading_messages(content)
+            logger.info(f"Generated loading messages for thread message: {loading_messages}")
+        except Exception as e:
+            logger.error(f"Failed to generate loading messages: {str(e)}")
+            loading_messages = openai_service._get_fallback_messages()
+            logger.info(f"Using fallback messages: {loading_messages}")
+
         response = await openai_service.process_message(
             thread_id=thread_id,
             message=message["content"],

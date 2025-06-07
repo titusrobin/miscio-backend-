@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     OPENAI_ASSISTANT_MODEL: str = "gpt-4-turbo-preview"
     OPENAI_MAX_TOKENS: int = 4000
     OPENAI_TEMPERATURE: float = 0.7
+    LOADING_ASSISTANT_ID: str = "asst_MPDWS9CLVZ8LYJcHheiAjRym"
+
 
     MONGODB_URL: str
     MONGODB_DB_NAME: str = "MiscioP1"

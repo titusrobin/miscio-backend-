@@ -814,3 +814,136 @@ class OpenAIService(BaseAPIService):
         except Exception as e:
             logger.error(f"Error ensuring vector store attachment: {str(e)}")
             return False
+
+    #########################################################################  
+    ##################### Loading Assistant Stuff ##########################
+    #########################################################################
+    async def generate_loading_messages(self, user_prompt: str) -> List[str]:
+        """
+        Generate contextual loading messages for a user prompt using the dedicated loading assistant.
+        
+        Args:
+            user_prompt: The original prompt from the admin user
+            
+        Returns:
+            List of contextual loading messages to display during processing
+        """
+        try:
+            logger.info(f"Generating loading messages for prompt: {user_prompt[:100]}...")
+            
+            # Create a temporary thread for the loading assistant
+            thread_data = await self.create_thread()
+            thread_id = thread_data["id"]
+            
+            # Prepare the prompt for the loading assistant
+            loading_prompt = f"""Here's the admin's message: {user_prompt}"""
+            
+            # Send message to loading assistant
+            message_response = await self.make_request(
+                method="POST",
+                url=f"{self.base_url}/threads/{thread_id}/messages",
+                headers=self.headers,
+                data={"role": "user", "content": loading_prompt}
+            )
+            logger.info(f"Loading assistant message created: {message_response.get('id')}")
+            
+            # Create and start a run with the loading assistant
+            run_response = await self.make_request(
+                method="POST",
+                url=f"{self.base_url}/threads/{thread_id}/runs",
+                headers=self.headers,
+                data={"assistant_id": settings.LOADING_ASSISTANT_ID}
+            )
+            run_id = run_response["id"]
+            logger.info(f"Loading assistant run started: {run_id}")
+            
+            # Poll for completion (simplified version for loading assistant)
+            max_retries = 20  # Loading assistant should be fast
+            retries = 0
+            
+            while retries < max_retries:
+                try:
+                    status_response = await self.make_request(
+                        method="GET",
+                        url=f"{self.base_url}/threads/{thread_id}/runs/{run_id}",
+                        headers=self.headers
+                    )
+                    
+                    logger.info(f"Loading assistant run status: {status_response['status']}")
+                    
+                    if status_response["status"] == "completed":
+                        # Get the response
+                        messages_response = await self.make_request(
+                            method="GET",
+                            url=f"{self.base_url}/threads/{thread_id}/messages",
+                            headers=self.headers,
+                            params={"limit": 1, "order": "desc"}
+                        )
+                        
+                        if messages_response.get("data") and len(messages_response["data"]) > 0:
+                            message_content = messages_response["data"][0].get("content", [])
+                            if message_content and message_content[0].get("type") == "text":
+                                response_text = message_content[0]["text"]["value"]
+                                logger.info(f"Loading assistant response: {response_text}")
+                                
+                                # Parse JSON response
+                                try:
+                                    import json
+                                    loading_messages = json.loads(response_text)
+                                    if isinstance(loading_messages, list):
+                                        logger.info(f"Successfully generated {len(loading_messages)} loading messages")
+                                        return loading_messages
+                                    else:
+                                        logger.warning("Loading assistant didn't return a list")
+                                        return self._get_fallback_messages()
+                                except json.JSONDecodeError as e:
+                                    logger.error(f"Failed to parse loading messages JSON: {str(e)}")
+                                    logger.error(f"Raw response: {response_text}")
+                                    return self._get_fallback_messages()
+                        
+                        logger.error("No valid content in loading assistant response")
+                        return self._get_fallback_messages()
+                    
+                    elif status_response["status"] in ["failed", "cancelled", "expired"]:
+                        error_message = status_response.get("last_error", {}).get("message", "Unknown error")
+                        logger.error(f"Loading assistant run failed: {error_message}")
+                        return self._get_fallback_messages()
+                    
+                    # Still in progress, wait and retry
+                    retries += 1
+                    await asyncio.sleep(1)
+                    
+                except Exception as e:
+                    logger.error(f"Error checking loading assistant status: {str(e)}")
+                    retries += 1
+                    await asyncio.sleep(1)
+            
+            # Timeout reached
+            logger.warning("Loading assistant timed out")
+            return self._get_fallback_messages()
+            
+        except Exception as e:
+            logger.error(f"Error generating loading messages: {str(e)}")
+            return self._get_fallback_messages()
+
+    def _get_fallback_messages(self) -> List[str]:
+        """
+        Fallback loading messages in case the loading assistant fails.
+        """
+        return [
+            "Processing your request...",
+            "Analyzing the requirements...",
+            "Setting up the necessary parameters...",
+            "Preparing the response...",
+            "Gathering relevant information...",
+            "Optimizing the solution...",
+            "Coordinating system resources...",
+            "Finalizing the details...",
+            "Running quality checks...",
+            "Preparing for delivery...",
+            "Almost ready...",
+            "Completing final steps...",
+            "Ready for deployment...",
+            "Finishing up...",
+            "Just a moment more..."
+        ]
