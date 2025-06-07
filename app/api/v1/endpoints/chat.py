@@ -327,6 +327,42 @@ async def update_thread_title(
             detail=str(e)
         )
 
+@router.post("/loading-messages")
+async def generate_loading_messages_endpoint(
+    message: Dict[str, str],
+    current_admin: Admin = Depends(get_current_admin_user),
+    openai_service: OpenAIService = Depends(get_openai_service),
+):
+    """
+    Generate contextual loading messages for a user prompt - frontend endpoint
+    """
+    logger.info(f"POST /loading-messages - Generating loading messages")
+    try:
+        content = message.get("content")
+        if not content:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Message content is required",
+            )
+
+        # Generate loading messages
+        try:
+            loading_messages = await openai_service.generate_loading_messages(content)
+            logger.info(f"Generated {len(loading_messages)} loading messages for frontend")
+            return {"loading_messages": loading_messages}
+        except Exception as e:
+            logger.error(f"Failed to generate loading messages: {str(e)}")
+            # Return fallback messages
+            fallback_messages = openai_service._get_fallback_messages()
+            return {"loading_messages": fallback_messages}
+
+    except Exception as e:
+        logger.error(f"Error in loading messages endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=str(e)
+        )
+
 
 
 # =====================================================================
