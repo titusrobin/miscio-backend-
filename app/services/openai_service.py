@@ -6,6 +6,7 @@ import json
 import asyncio
 import logging
 import os
+import random 
 
 logger = logging.getLogger(__name__)
 
@@ -930,20 +931,42 @@ class OpenAIService(BaseAPIService):
         """
         Fallback loading messages in case the loading assistant fails.
         """
-        return [
-            "Processing your request...",
-            "Analyzing the requirements...",
-            "Setting up the necessary parameters...",
-            "Preparing the response...",
-            "Gathering relevant information...",
-            "Optimizing the solution...",
-            "Coordinating system resources...",
-            "Finalizing the details...",
-            "Running quality checks...",
-            "Preparing for delivery...",
-            "Almost ready...",
-            "Completing final steps...",
-            "Ready for deployment...",
-            "Finishing up...",
-            "Just a moment more..."
+        all_messages = [
+            "🧠 Firing up the neurons...",
+            "🚀 Launching into thought space...",
+            "✨ Sprinkling some AI magic...",
+            "🔍 Hunting down the perfect answer...",
+            "⚡ Charging up the brain cells...",
+            "🎯 Zeroing in on your question...",
+            "🌊 Surfing the data waves...",
+            "🔥 Cooking up something awesome...",
+            "💡 Having a lightbulb moment...",
+            "🎪 Performing some digital acrobatics...",
+            "🧙‍♂️ Casting knowledge spells...",
+            "🎨 Painting your perfect response...",
+            "🔬 Running some smart experiments...",
+            "🎵 Composing your answer symphony...",
+            "🕵️ Investigating all possibilities...",
+            "🎲 Rolling the dice of wisdom...",
+            "🌟 Connecting the cosmic dots...",
+            "🏃‍♂️ Racing through the data maze...",
+            "🎭 Putting on my thinking cap...",
+            "🎈 Inflating ideas with creativity...",
+            "🔮 Consulting the digital crystal ball...",
+            "🎪 Juggling multiple solutions...",
+            "🚂 All aboard the thought train...",
+            "🎯 Bullseye! Almost got it...",
+            "🎊 Adding the finishing touches...",
+            "🎁 Wrapping up your surprise...",
+            "🏆 Polishing this masterpiece...",
+            "✅ Quality checking the magic...",
+            "🎉 Ready to blow your mind!",
+            "📡 Beaming down the answer now..."
         ]
+        
+        # Randomly shuffle the messages for variety
+        random.shuffle(all_messages)
+        
+        # Return a random subset (8-12 messages) to keep it fresh
+        subset_size = random.randint(8, 12)
+        return all_messages[:subset_size]
