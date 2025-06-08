@@ -932,20 +932,12 @@ class OpenAIService(BaseAPIService):
         Fallback loading messages in case the loading assistant fails.
         """
         all_messages = [
-            "🧠 Firing up the neurons...",
-            "🚀 Launching into thought space...",
-            "✨ Sprinkling some AI magic...",
-            "🔍 Hunting down the perfect answer...",
-            "🎯 Zeroing in on your question...",
-            "💡 Having a lightbulb moment...",
-            "🔬 Running some smart experiments...",
-            "🕵️ Investigating all possibilities...",
-            "🎭 Putting on my thinking cap...",
-            "🎈 Inflating ideas with creativity...",
-            "🎪 Juggling multiple solutions...",
-            "🚂 All aboard the thought train...",
-            "🎯 Bullseye! Almost got it...",
-            "✅ Quality checking the magic...",
+            "🚀 Thinking as we speak...",
+            "Okay, Hunting down the answer here...",
+            "🎯 Zeroing in on your question real quick...",
+            "Bullseye! Almost got it...",
+            "✅ Quality checking what we have here...",
+            "Alrighty, juggling a couple thoughts for a second..."
         ]
         
         # Randomly shuffle the messages for variety
