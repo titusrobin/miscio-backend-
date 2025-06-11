@@ -933,7 +933,7 @@ class OpenAIService(BaseAPIService):
         """
         all_messages = [
             "🚀 Thinking as we speak...",
-            "Okay, Hunting down the answer here...",
+            "Okay, hunting down the answer here...",
             "🎯 Zeroing in on your question real quick...",
             "Bullseye! Almost got it...",
             "✅ Quality checking what we have here...",
