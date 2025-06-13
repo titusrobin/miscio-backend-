@@ -332,50 +332,85 @@ class CampaignService:
         return admin_data
 
     async def _generate_sample_message(self, draft_request: CampaignDraftRequest, admin_id: str) -> str:
-        """Generate a sample message using OpenAI based on the campaign request"""
+        """Generate a sample message using direct OpenAI API call"""
         try:
-            # Create a prompt for message generation
-            prompt = f"""
-            Create a professional, engaging message for students based on these details:
+            # Create a simple message generation prompt
+            prompt = f"""Create a professional, engaging message for students. 
+
+    Purpose: {draft_request.campaign_purpose}
+    Details: {draft_request.campaign_details}
+    Key Points: {draft_request.key_points}
+    Call to Action: {draft_request.call_to_action}
+    Tone: {draft_request.tone_and_style}
+
+    Requirements:
+    - Keep it concise and student-friendly (2-3 paragraphs max)
+    - Include the key points naturally
+    - Use the specified tone
+    - End with the call to action
+    - No asterisks or markdown formatting
+    - Make it personal and engaging
+
+    Return only the message content, no extra text."""
+
+            # Use OpenAI Chat Completions API directly (not assistants)
+            headers = {
+                "Authorization": f"Bearer {self.openai_service.headers['Authorization'].split(' ')[1]}",
+                "Content-Type": "application/json"
+            }
             
-            Campaign Purpose: {draft_request.campaign_purpose}
-            Details: {draft_request.campaign_details}
-            Key Points: {draft_request.key_points}
-            Call to Action: {draft_request.call_to_action}
-            Tone: {draft_request.tone_and_style}
-            Audience: {draft_request.target_audience}
+            data = {
+                "model": "gpt-4-turbo-preview",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 500,
+                "temperature": 0.7
+            }
             
-            Requirements:
-            - Keep it concise and student-friendly
-            - Include the key points naturally
-            - Use the specified tone and style
-            - End with the call to action
-            - Don't use asterisks for formatting
-            - Make it personal and engaging
-            """
-            
-            # Create a temporary thread for message generation
-            thread_data = await self.openai_service.create_thread()
-            thread_id = thread_data["id"]
-            
-            # Get admin data to find assistant
-            admin_data = await self._get_admin_data(admin_id)
-            assistant_id = admin_data.get("assistant_id") if admin_data else "asst_re59LKPfW1Fya4rwuoxVHKOa"
-            
-            # Generate message using OpenAI
-            response = await self.openai_service.process_message(
-                thread_id=thread_id,
-                message=prompt,
-                assistant_id=assistant_id
+            response = await self.openai_service.make_request(
+                method="POST",
+                url="https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                data=data
             )
             
-            logger.info(f"Generated sample message for campaign: {draft_request.campaign_purpose}")
-            return response.strip()
-            
+            if response and "choices" in response and len(response["choices"]) > 0:
+                message = response["choices"][0]["message"]["content"].strip()
+                logger.info(f"Generated sample message for campaign: {draft_request.campaign_purpose}")
+                return message
+            else:
+                logger.warning("No response from OpenAI, using fallback")
+                return self._generate_enhanced_fallback_message(draft_request)
+                
         except Exception as e:
             logger.error(f"Error generating sample message: {str(e)}")
-            # Fallback message generation
-            return self._generate_fallback_message(draft_request)
+            return self._generate_enhanced_fallback_message(draft_request)
+
+    def _generate_enhanced_fallback_message(self, draft_request: CampaignDraftRequest) -> str:
+        """Generate a well-structured fallback message"""
+        message = "Hi everyone,\n\n"
+        
+        # Add the main details
+        message += f"{draft_request.campaign_details}\n\n"
+        
+        # Add key points if available
+        if draft_request.key_points:
+            points = [p.strip() for p in draft_request.key_points.split(',') if p.strip()]
+            if len(points) > 1:
+                message += "Key details:\n"
+                for point in points:
+                    message += f"• {point}\n"
+                message += "\n"
+            else:
+                message += f"{draft_request.key_points}\n\n"
+        
+        # Add call to action
+        if draft_request.call_to_action:
+            message += f"{draft_request.call_to_action.capitalize()}.\n\n"
+        
+        # Add closing
+        message += "Thank you for your understanding!"
+        
+        return message
 
     def _generate_fallback_message(self, draft_request: CampaignDraftRequest) -> str:
         """Generate a simple fallback message when OpenAI fails"""
@@ -716,5 +751,189 @@ class CampaignService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to retrieve campaign: {str(e)}"
             )
+    
+    async def query_student_chats(self, query: str = None, thread_id: str = None, limit: int = 25) -> List[Dict]:
+        """
+        Get student chat histories for campaigns associated with a thread.
+        Returns the latest interactions without status filtering.
+        """
+        try:
+            filter_query = {}
+            
+            if thread_id:
+                # Find ALL campaigns associated with this thread (regardless of status)
+                campaigns = await self.db.campaigns.find({"thread_id": thread_id}).to_list(length=None)
+                
+                if campaigns:
+                    campaign_ids = [str(campaign["_id"]) for campaign in campaigns]
+                    logger.info(f"Found {len(campaign_ids)} campaigns for thread {thread_id}")
+                    filter_query["campaign_id"] = {"$in": campaign_ids}
+                else:
+                    logger.warning(f"No campaigns found for thread {thread_id}")
+                    # Return empty list if no campaigns found for this thread
+                    return []
+            
+            # Simple time-based retrieval of latest interactions
+            cursor = self.db.interactions.find(filter_query).sort("timestamp", -1).limit(limit)
+            
+            results = []
+            async for interaction in cursor:
+                # Safely get student and campaign information
+                student = None
+                campaign = None
+                
+                if "student_id" in interaction and interaction["student_id"]:
+                    student = await self.db.students.find_one(
+                        {"_id": interaction["student_id"]}
+                    )
+                
+                if "campaign_id" in interaction and interaction["campaign_id"]:
+                    campaign = await self.db.campaigns.find_one(
+                        {"_id": interaction["campaign_id"]}
+                    )
+                
+                # Build result with proper null checks
+                result = {
+                    "message": interaction.get("message", ""),
+                    "timestamp": interaction.get("timestamp", datetime.utcnow()).isoformat(),
+                    "type": interaction.get("type", "unknown"),
+                    "contact_method": interaction.get("contact_method", "unknown"),
+                    "status": interaction.get("status", "unknown"),
+                }
+                
+                # Add student info if available
+                if student:
+                    result["student_name"] = f"{student.get('first_name', '')} {student.get('last_name', '')}".strip()
+                else:
+                    result["student_name"] = "Unknown Student"
+                
+                # Add campaign info if available
+                if campaign:
+                    result["campaign_description"] = campaign.get("description", "Unknown Campaign")
+                else:
+                    result["campaign_description"] = "Unknown Campaign"
+                
+                results.append(result)
+            
+            # Return results in chronological order (oldest to newest)
+            return results[::-1]
+
+        except Exception as e:
+            logger.error(f"Error querying student chats: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to query student chats: {str(e)}",
+            )
+        
+    async def _generate_personalized_message(
+    self, 
+    campaign: dict, 
+    student: dict, 
+    assistant_id: str,
+    admin_id: str
+) -> str:
+        """
+        Generate a personalized message for a student based on comprehensive campaign details.
+        Uses the OpenAI assistant to create a well-formatted, contextually relevant message.
+        
+        Args:
+            campaign: Dictionary containing comprehensive campaign information
+            student: Dictionary containing student information
+            assistant_id: ID of the OpenAI assistant to use for generation
+            admin_id: ID of the admin creating the campaign
+        
+        Returns:
+            Personalized message text
+        """
+        try:
+            # Extract student information
+            student_name = student.get('first_name', 'Student')
+            student_id = str(student.get('_id', ''))
+            
+            # Create a temporary thread for this message generation
+            thread_data = await self.openai_service.create_thread()
+            thread_id = thread_data["id"]
+            
+            # Fetch student interaction history
+            student_interactions = await self.db.interactions.find({
+                "student_id": student_id
+            }).sort("timestamp", -1).limit(3).to_list(length=None)
+            
+            # Format interaction history if available
+            history_text = ""
+            has_history = len(student_interactions) > 0
+            
+            if has_history:
+                history_text = "Previous conversation history:\n"
+                for interaction in reversed(student_interactions):  # Oldest to newest
+                    if interaction.get("type") == "response":
+                        history_text += f"Student: {interaction.get('message', '')}\n"
+                    else:
+                        history_text += f"Assistant: {interaction.get('message', '')}\n"
+            
+            # Construct the prompt for message generation
+            prompt = f"""
+            You are writing a personal message to {student_name}. Do NOT call any functions other than the file search. 
+            Only respond with the message text that should be sent to the student.
+            
+            CAMPAIGN INFORMATION:
+            Purpose: {campaign.get('purpose', '')}
+            Details: {campaign.get('details', '')}
+            Target audience: {campaign.get('audience', 'all students')}
+            Tone to use: {campaign.get('tone', 'friendly and helpful')}
+            Key points to include: {campaign.get('key_points', '')}
+            Call to action: {campaign.get('call_to_action', '')}
+            
+            {"" if not has_history else history_text}
+            
+            Write a personalized message that:
+            1. Addresses the student by name
+            2. {'' if has_history else 'Introduces yourself and your purpose'}
+            3. {'' if not has_history else 'References previous interactions naturally'}
+            4. Communicates the key campaign information clearly
+            5. Uses the specified tone ({campaign.get('tone', 'friendly and helpful')})
+            
+            No need for any formal sign-offs. DO NOT include any signature, sign-off, or name at the end. 
+            """
+            
+            # Process the message with the OpenAI assistant
+            response = await self.openai_service.process_message(
+                thread_id=thread_id,
+                message=prompt,
+                assistant_id=assistant_id,
+                run_handler=self._message_generation_handler
+            )
+            
+            # Clean up the response if needed
+            message = response.strip()
+            
+            logger.info(f"Generated personalized message for {student_name}")
+            return message
+            
+        except Exception as e:
+            logger.error(f"Error generating personalized message: {str(e)}")
+            # Fall back to basic message if generation fails
+            fallback_message = f"Hi {student.get('first_name', 'Student')}, "
+            
+            if campaign.get('purpose'):
+                fallback_message += f"I'm reaching out about {campaign.get('purpose')}. "
+                
+            if campaign.get('key_points'):
+                fallback_message += f"{campaign.get('key_points')} "
+                
+            if campaign.get('call_to_action'):
+                fallback_message += f"Please {campaign.get('call_to_action')}."
+            
+            return fallback_message
+        
+    
+    async def _message_generation_handler(self, tool_calls):
+        """Simple handler for function calls during message generation.
+        Just logs what was called and returns empty outputs to avoid errors."""
+        
+        logger.info(f"Function called during message generation: {json.dumps(tool_calls, indent=2)}")
+        
+        # Return minimal valid outputs to satisfy the API
+        return [{"tool_call_id": call["id"], "output": "{}"} for call in tool_calls]
 
     

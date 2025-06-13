@@ -11,7 +11,7 @@ from app.services.campaign_service import CampaignService
 from app.services.twilio_service import TwilioService
 from app.services.sendgrid_service import SendGridService
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.schemas.campaign import CampaignDraftRequest
+from app.schemas.campaign import CampaignDraftRequest, CampaignApprovalRequest
 
 
 router = APIRouter()
@@ -427,7 +427,8 @@ The draft has been saved and is ready for your review."""
                                     "campaign_id": result.get("id"),
                                     "draft_content": draft_content,
                                     "thread_id": thread_id
-                                }
+                                },
+                                default=str  # This handles datetime serialization
                             ),
                         }
                     )
@@ -471,69 +472,68 @@ The draft has been saved and is ready for your review."""
                         }
                     )
 
-            # Handle legacy function name for backward compatibility
-            elif function_name == "run_campaign":
-                logger.warning("Legacy run_campaign function called - redirecting to create_messaging_draft")
-                # Map old parameters to new format
+            elif function_name == "execute_campaign":
+                # Execute approved campaign
                 try:
-                    draft_request = CampaignDraftRequest(
-                        campaign_purpose=arguments.get("campaign_purpose", arguments.get("title", "")),
-                        campaign_details=arguments.get("campaign_details", ""),
-                        target_audience=arguments.get("target_audience", "all students"),
-                        tone_and_style=arguments.get("tone_and_style", "friendly and helpful"),
-                        key_points=arguments.get("key_points", ""),
-                        call_to_action=arguments.get("call_to_action", "respond with any questions"),
-                        thread_id=thread_id
+                    campaign_id = arguments.get("campaign_id", "")
+                    confirmation = arguments.get("confirmation", "")
+                    
+                    if not campaign_id:
+                        raise Exception("Campaign ID is required for execution")
+                    
+                    # Create approval request
+                    approval_request = CampaignApprovalRequest(
+                        campaign_id=campaign_id,
+                        action="approve",
+                        notes=f"Admin approval: {confirmation}"
                     )
                     
-                    result = await campaign_service.create_messaging_draft(
-                        draft_request=draft_request,
-                        admin_id=current_admin.id,
-                        thread_id=thread_id
+                    # Execute the campaign
+                    result = await campaign_service.approve_and_execute_campaign(
+                        approval_request=approval_request,
+                        admin_id=current_admin.id
                     )
+                    
+                    # Get execution summary
+                    execution_summary = result.get("execution_summary", {})
+                    total_students = execution_summary.get("total_students", 0)
+                    successful_messages = execution_summary.get("successful_messages", 0)
+                    failed_messages = execution_summary.get("failed_messages", 0)
+                    
+                    # Format success response
+                    response_message = f"Campaign executed successfully! "
+                    response_message += f"Sent to {successful_messages} students"
+                    if failed_messages > 0:
+                        response_message += f" ({failed_messages} failed)"
+                    response_message += f" out of {total_students} total students."
                     
                     tool_outputs.append(
                         {
                             "tool_call_id": tool_call["id"],
-                            "output": json.dumps({
-                                "status": "success",
-                                "message": f"Draft created (legacy mode). Campaign ID: {result.get('id')}",
-                                "campaign_id": result.get("id")
-                            }),
+                            "output": json.dumps(
+                                {
+                                    "status": "success",
+                                    "message": response_message,
+                                    "campaign_id": campaign_id,
+                                    "execution_summary": execution_summary
+                                },
+                                default=str  # Handle datetime serialization
+                            ),
                         }
                     )
+                    
+                    logger.info(f"Successfully executed campaign: {campaign_id}")
+                    
                 except Exception as e:
+                    logger.error(f"Error executing campaign: {str(e)}")
                     tool_outputs.append(
                         {
                             "tool_call_id": tool_call["id"],
                             "output": json.dumps({
-                                "status": "error", 
-                                "message": f"Legacy campaign creation failed: {str(e)}"
+                                "status": "error",
+                                "message": f"Failed to execute campaign: {str(e)}"
                             }),
                         }
                     )
-
-            else:
-                logger.warning(f"Unknown function called: {function_name}")
-                tool_outputs.append(
-                    {
-                        "tool_call_id": tool_call["id"],
-                        "output": json.dumps({
-                            "status": "error",
-                            "message": f"Unknown function: {function_name}"
-                        }),
-                    }
-                )
-
-            logger.info(f"Function call handled successfully: {function_name}")
-
-        except Exception as e:
-            logger.error(f"Error handling tool call: {str(e)}")
-            tool_outputs.append(
-                {
-                    "tool_call_id": tool_call["id"],
-                    "output": json.dumps({"error": str(e)}),
-                }
-            )
 
     return tool_outputs # return tool_outputs so that OpenAI can incorporate the results of the function calls into its response to the admin
