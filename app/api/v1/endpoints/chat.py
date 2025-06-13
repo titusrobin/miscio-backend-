@@ -535,5 +535,13 @@ The draft has been saved and is ready for your review."""
                             }),
                         }
                     )
+        except Exception as e:
+            logger.error(f"Error handling tool call: {str(e)}")
+            tool_outputs.append(
+                {
+                    "tool_call_id": tool_call["id"],
+                    "output": json.dumps({"error": str(e)}),
+                }
+            )
 
     return tool_outputs # return tool_outputs so that OpenAI can incorporate the results of the function calls into its response to the admin
