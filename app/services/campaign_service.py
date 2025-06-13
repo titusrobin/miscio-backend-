@@ -304,8 +304,8 @@ class CampaignService:
             "timestamp": datetime.utcnow(),
         }
         
-        if email_subject or contact_method == "email":
-            interaction_data["email_subject"] = email_subject or "Message from Miscio Assistant"
+        if email_subject:
+            interaction_data["email_subject"] = email_subject
         
         if assistant_id:
             interaction_data["assistant_id"] = assistant_id
@@ -331,5 +331,390 @@ class CampaignService:
         
         return admin_data
 
-    # Keep other existing methods like query_student_chats, get_campaign_stats, etc.
-    # with proper ObjectId handling...
+    async def _generate_sample_message(self, draft_request: CampaignDraftRequest, admin_id: str) -> str:
+        """Generate a sample message using OpenAI based on the campaign request"""
+        try:
+            # Create a prompt for message generation
+            prompt = f"""
+            Create a professional, engaging message for students based on these details:
+            
+            Campaign Purpose: {draft_request.campaign_purpose}
+            Details: {draft_request.campaign_details}
+            Key Points: {draft_request.key_points}
+            Call to Action: {draft_request.call_to_action}
+            Tone: {draft_request.tone_and_style}
+            Audience: {draft_request.target_audience}
+            
+            Requirements:
+            - Keep it concise and student-friendly
+            - Include the key points naturally
+            - Use the specified tone and style
+            - End with the call to action
+            - Don't use asterisks for formatting
+            - Make it personal and engaging
+            """
+            
+            # Create a temporary thread for message generation
+            thread_data = await self.openai_service.create_thread()
+            thread_id = thread_data["id"]
+            
+            # Get admin data to find assistant
+            admin_data = await self._get_admin_data(admin_id)
+            assistant_id = admin_data.get("assistant_id") if admin_data else "asst_re59LKPfW1Fya4rwuoxVHKOa"
+            
+            # Generate message using OpenAI
+            response = await self.openai_service.process_message(
+                thread_id=thread_id,
+                message=prompt,
+                assistant_id=assistant_id
+            )
+            
+            logger.info(f"Generated sample message for campaign: {draft_request.campaign_purpose}")
+            return response.strip()
+            
+        except Exception as e:
+            logger.error(f"Error generating sample message: {str(e)}")
+            # Fallback message generation
+            return self._generate_fallback_message(draft_request)
+
+    def _generate_fallback_message(self, draft_request: CampaignDraftRequest) -> str:
+        """Generate a simple fallback message when OpenAI fails"""
+        message = f"Hi there!\n\n{draft_request.campaign_details}\n\n"
+        
+        if draft_request.key_points:
+            message += f"{draft_request.key_points}\n\n"
+            
+        if draft_request.call_to_action:
+            message += f"{draft_request.call_to_action}\n\n"
+            
+        message += "If you have any questions, feel free to reach out!"
+        
+        return message
+
+    def _generate_subject(self, draft_request: CampaignDraftRequest) -> str:
+        """Generate an email subject line based on campaign purpose"""
+        purpose = draft_request.campaign_purpose.strip()
+        
+        # Simple subject generation logic
+        if "deadline" in purpose.lower() or "reminder" in purpose.lower():
+            return f"Reminder: {purpose}"
+        elif "new" in purpose.lower() or "announcement" in purpose.lower():
+            return f"Update: {purpose}"
+        elif "important" in purpose.lower():
+            return f"Important: {purpose}"
+        else:
+            # Capitalize first letter and ensure it's not too long
+            subject = purpose[0].upper() + purpose[1:] if purpose else "Message from Your School"
+            return subject[:50] + "..." if len(subject) > 50 else subject
+
+    async def _cancel_campaign(self, campaign: dict, approval_request: CampaignApprovalRequest, admin_id: str) -> Dict:
+        """Cancel a draft campaign"""
+        try:
+            # Update campaign status to cancelled
+            await self.db.campaigns.update_one(
+                {"_id": safe_object_id(campaign["_id"])},
+                {
+                    "$set": {
+                        "status": CampaignStatus.CANCELLED.value,
+                        "completed_at": datetime.utcnow()
+                    },
+                    "$push": {
+                        "approval_history": {
+                            "action": "cancelled",
+                            "timestamp": datetime.utcnow(),
+                            "admin_id": admin_id,
+                            "notes": approval_request.notes or "Campaign cancelled by admin"
+                        }
+                    }
+                }
+            )
+            
+            logger.info(f"Campaign {campaign['_id']} cancelled by admin {admin_id}")
+            
+            return {
+                "status": "success",
+                "message": "Campaign cancelled successfully",
+                "campaign_id": str(campaign["_id"])
+            }
+            
+        except Exception as e:
+            logger.error(f"Error cancelling campaign: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to cancel campaign: {str(e)}"
+            )
+
+    async def _modify_draft(self, campaign: dict, approval_request: CampaignApprovalRequest, admin_id: str) -> Dict:
+        """Modify a draft campaign and keep it in draft status"""
+        try:
+            # Prepare updated draft content
+            current_draft = campaign.get("draft_content", {})
+            
+            updated_draft = {
+                "message": approval_request.modified_message or current_draft.get("message"),
+                "subject": approval_request.modified_subject or current_draft.get("subject"),
+                "generated_at": datetime.utcnow(),
+                "generation_context": current_draft.get("generation_context")
+            }
+            
+            # Update the campaign
+            await self.db.campaigns.update_one(
+                {"_id": safe_object_id(campaign["_id"])},
+                {
+                    "$set": {
+                        "draft_content": updated_draft,
+                        "status": CampaignStatus.DRAFT.value  # Keep in draft
+                    },
+                    "$push": {
+                        "approval_history": {
+                            "action": "modified",
+                            "timestamp": datetime.utcnow(),
+                            "admin_id": admin_id,
+                            "notes": approval_request.notes or "Draft modified by admin"
+                        }
+                    }
+                }
+            )
+            
+            logger.info(f"Campaign {campaign['_id']} draft modified by admin {admin_id}")
+            
+            return {
+                "status": "success", 
+                "message": "Campaign draft updated successfully",
+                "campaign_id": str(campaign["_id"]),
+                "updated_content": updated_draft
+            }
+            
+        except Exception as e:
+            logger.error(f"Error modifying campaign draft: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to modify campaign draft: {str(e)}"
+            )
+
+    async def _approve_and_execute(self, campaign: dict, approval_request: CampaignApprovalRequest, admin_id: str) -> Dict:
+        """Approve and execute a messaging campaign"""
+        try:
+            async with await self.db.client.start_session() as session:
+                async with session.start_transaction():
+                    
+                    # Determine final content (modified or original draft)
+                    draft_content = campaign.get("draft_content", {})
+                    final_message = approval_request.modified_message or draft_content.get("message")
+                    final_subject = approval_request.modified_subject or draft_content.get("subject")
+                    
+                    if not final_message:
+                        raise Exception("No message content available for execution")
+                    
+                    # Create approved content
+                    approved_content = ApprovedContent(
+                        message=final_message,
+                        subject=final_subject,
+                        approved_by=admin_id,
+                        modifications_from_draft=approval_request.modified_message or approval_request.modified_subject
+                    )
+                    
+                    # Update campaign to executing status
+                    await self.db.campaigns.update_one(
+                        {"_id": safe_object_id(campaign["_id"])},
+                        {
+                            "$set": {
+                                "status": CampaignStatus.EXECUTING.value,
+                                "approved_content": approved_content.dict(),
+                                "executed_at": datetime.utcnow()
+                            },
+                            "$push": {
+                                "approval_history": {
+                                    "action": "approved",
+                                    "timestamp": datetime.utcnow(),
+                                    "admin_id": admin_id,
+                                    "notes": approval_request.notes or "Campaign approved and executing"
+                                }
+                            }
+                        },
+                        session=session
+                    )
+                    
+                    # Get all active students for this admin
+                    students = await self.db.students.find(
+                        {"admin_id": admin_id, "status": "active"}, 
+                        session=session
+                    ).to_list(length=None)
+                    
+                    logger.info(f"Executing campaign for {len(students)} students")
+                    
+                    # Execute campaign - send to all students
+                    successful_messages = 0
+                    failed_messages = 0
+                    
+                    for student in students:
+                        try:
+                            contact_method = student.get('preferred_contact_method', 'email')
+                            
+                            if contact_method == 'email' and student.get('email'):
+                                await self.sendgrid_service.send_message(
+                                    to_email=student["email"],
+                                    subject=final_subject or "Message from Your School",
+                                    message=final_message,
+                                    message_type="initial"
+                                )
+                                contact_used = "email"
+                                
+                            elif student.get('phone'):
+                                await self.twilio_service.send_message(
+                                    student["phone"], 
+                                    final_message
+                                )
+                                contact_used = "whatsapp"
+                                
+                            else:
+                                logger.warning(f"No valid contact method for student {student['_id']}")
+                                failed_messages += 1
+                                continue
+                            
+                            # Record interaction
+                            await self._record_student_interaction(
+                                campaign_id=str(campaign["_id"]),
+                                student_id=str(student["_id"]),
+                                message=final_message,
+                                contact_method=contact_used,
+                                interaction_type="initial",
+                                email_subject=final_subject if contact_used == "email" else None,
+                                session=session,
+                                admin_id=admin_id
+                            )
+                            
+                            successful_messages += 1
+                            
+                        except Exception as e:
+                            logger.error(f"Error sending to student {student['_id']}: {str(e)}")
+                            failed_messages += 1
+                    
+                    # Create execution summary
+                    execution_summary = {
+                        "total_students": len(students),
+                        "successful_messages": successful_messages,
+                        "failed_messages": failed_messages,
+                        "execution_date": datetime.utcnow(),
+                        "message_content": final_message[:100] + "..." if len(final_message) > 100 else final_message
+                    }
+                    
+                    # Update campaign to completed
+                    await self.db.campaigns.update_one(
+                        {"_id": safe_object_id(campaign["_id"])},
+                        {
+                            "$set": {
+                                "status": CampaignStatus.COMPLETED.value,
+                                "completed_at": datetime.utcnow(),
+                                "execution_summary": execution_summary
+                            }
+                        },
+                        session=session
+                    )
+                    
+                    logger.info(f"Campaign {campaign['_id']} completed successfully: {successful_messages} sent, {failed_messages} failed")
+                    
+                    return {
+                        "status": "success",
+                        "message": f"Campaign executed successfully! Sent to {successful_messages} students.",
+                        "campaign_id": str(campaign["_id"]),
+                        "execution_summary": execution_summary
+                    }
+        
+        except Exception as e:
+            logger.error(f"Error executing campaign: {str(e)}")
+            
+            # Update campaign to failed status
+            try:
+                await self.db.campaigns.update_one(
+                    {"_id": safe_object_id(campaign["_id"])},
+                    {
+                        "$set": {
+                            "status": CampaignStatus.CANCELLED.value,
+                            "completed_at": datetime.utcnow()
+                        },
+                        "$push": {
+                            "approval_history": {
+                                "action": "failed",
+                                "timestamp": datetime.utcnow(),
+                                "admin_id": admin_id,
+                                "notes": f"Execution failed: {str(e)}"
+                            }
+                        }
+                    }
+                )
+            except:
+                pass  # Don't fail if we can't update status
+                
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to execute campaign: {str(e)}"
+            )
+
+    async def get_pending_campaigns(self, admin_id: str) -> List[Dict]:
+        """Get all campaigns waiting for admin approval"""
+        try:
+            campaigns = await self.db.campaigns.find({
+                "admin_id": admin_id,
+                "status": CampaignStatus.DRAFT.value
+            }).sort("created_at", -1).to_list(length=None)
+            
+            formatted_campaigns = []
+            for campaign in campaigns:
+                # Get preview of draft message
+                draft_content = campaign.get("draft_content", {})
+                preview_message = None
+                if draft_content.get("message"):
+                    preview_message = draft_content["message"][:100] + "..." if len(draft_content["message"]) > 100 else draft_content["message"]
+                
+                formatted_campaign = {
+                    "id": str(campaign["_id"]),
+                    "type": campaign.get("type", CampaignType.MESSAGING.value),
+                    "status": campaign.get("status"),
+                    "description": campaign.get("description", ""),
+                    "created_at": campaign.get("created_at"),
+                    "admin_id": campaign.get("admin_id"),
+                    "preview_message": preview_message,
+                    "draft_content": draft_content
+                }
+                formatted_campaigns.append(formatted_campaign)
+            
+            return formatted_campaigns
+            
+        except Exception as e:
+            logger.error(f"Error retrieving pending campaigns: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to retrieve pending campaigns: {str(e)}"
+            )
+
+    async def get_campaign_by_id(self, campaign_id: str, admin_id: str) -> Dict:
+        """Get a specific campaign by ID with full details"""
+        try:
+            campaign = await self.db.campaigns.find_one({
+                "_id": safe_object_id(campaign_id),
+                "admin_id": admin_id
+            })
+            
+            if not campaign:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Campaign not found"
+                )
+            
+            # Format response
+            campaign["id"] = str(campaign["_id"])
+            del campaign["_id"]
+            
+            return campaign
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error retrieving campaign: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to retrieve campaign: {str(e)}"
+            )
+
+    

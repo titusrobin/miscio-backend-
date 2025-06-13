@@ -11,6 +11,7 @@ from app.services.campaign_service import CampaignService
 from app.services.twilio_service import TwilioService
 from app.services.sendgrid_service import SendGridService
 from fastapi import APIRouter, Depends, HTTPException, status
+from app.schemas.campaign import CampaignDraftRequest
 
 
 router = APIRouter()
@@ -372,109 +373,155 @@ async def handle_tool_calls(
 ) -> List[Dict]:
     """
     Processes function calls requested by the OpenAI assistant and returns the results.
-    
-    This function serves as a bridge between the OpenAI assistant and application business logic.
-    When the assistant needs to perform actions like creating campaigns or querying data,
-    it makes "tool calls" which this function executes.
-    
-    Parameters:
-        tool_calls: List of dictionaries from OpenAI containing function calls to execute.
-                   Each dictionary has the structure:
-                   {
-                       "id": "call_abc123xyz456",  # Unique identifier for this call
-                       "type": "function",         # Type of tool (always "function" here)
-                       "function": {
-                           "name": "function_name",  # Name of function to execute
-                           "arguments": "{\"param1\":\"value1\"}"  # JSON string of arguments
-                       }
-                   }
-        
-    Returns:
-        List of dictionaries containing the results of each tool call:
-        [
-            {
-                "tool_call_id": "call_abc123xyz456",  # ID from the original call
-                "output": "{\"status\":\"success\",\"message\":\"...\"}"  # JSON string result
-            },
-            ...
-        ]
-        
-    Note:
-        This function handles errors for individual tool calls without failing the entire
-        request. If a tool call fails, an error message is returned for that specific call.
+    Updated to handle the new draft-approval workflow.
     """
-    #already in openai_service.py logged
-    #logger.info(f"Received tool calls to process: {json.dumps(tool_calls, indent=2)}") #Convert objects to json string
-
+    
     tool_outputs = []
     for tool_call in tool_calls:
         try:
-            function_name = tool_call["function"]["name"]  # Extract the function name and arguments
+            function_name = tool_call["function"]["name"]
             arguments = json.loads(tool_call["function"]["arguments"])
             logger.info(
                 f"Handling function call: {function_name} with arguments: {arguments}"
             )
 
-            if function_name == "run_campaign":
-                # Extract comprehensive campaign details
-                campaign_purpose = arguments.get("campaign_purpose", "")
-                campaign_details = arguments.get("campaign_details", "")
-                target_audience = arguments.get("target_audience", "all students")
-                tone_and_style = arguments.get("tone_and_style", "friendly and helpful")
-                key_points = arguments.get("key_points", "")
-                call_to_action = arguments.get("call_to_action", "respond with any questions")
-                
-                # Combine all details into a comprehensive campaign description
-                campaign_description = {
-                    "purpose": campaign_purpose,
-                    "details": campaign_details,
-                    "audience": target_audience,
-                    "tone": tone_and_style,
-                    "key_points": key_points,
-                    "call_to_action": call_to_action,
-                    "thread_id": thread_id  # Include the thread_id for context
-                }
-                
-                # Log the comprehensive campaign details
-                logger.info(f"Creating campaign with detailed description: {json.dumps(campaign_description, indent=2)}")
-                
-                # Pass the enhanced campaign description to the campaign service
-                result = await campaign_service.create_campaign(
-                    campaign=campaign_description,
-                    admin_id=current_admin.id,
-                    thread_id=thread_id
-                )
-                
-                # Prepare a detailed response
-                response_message = (
-                    f"Campaign started successfully! I've created personalized messages focused on "
-                    f"'{campaign_purpose}' with a {tone_and_style} tone. "
-                    f"Each message includes the key points you mentioned and encourages students to {call_to_action}."
-                )
-                
-                tool_outputs.append(
-                    {
-                        "tool_call_id": tool_call["id"],
-                        "output": json.dumps(
-                            {
-                                "status": "success",
-                                "message": response_message,
-                                "campaign_id": result.get("id"),
-                                "thread_id": thread_id
-                            }
-                        ),
-                    }
-                )
+            if function_name == "create_messaging_draft":
+                # Create draft campaign using new workflow
+                try:
+                    # Create CampaignDraftRequest from arguments
+                    draft_request = CampaignDraftRequest(
+                        campaign_purpose=arguments.get("campaign_purpose", ""),
+                        campaign_details=arguments.get("campaign_details", ""),
+                        target_audience=arguments.get("target_audience", "all students"),
+                        tone_and_style=arguments.get("tone_and_style", "friendly and helpful"),
+                        key_points=arguments.get("key_points", ""),
+                        call_to_action=arguments.get("call_to_action", "respond with any questions"),
+                        thread_id=thread_id
+                    )
+                    
+                    # Create the draft campaign
+                    result = await campaign_service.create_messaging_draft(
+                        draft_request=draft_request,
+                        admin_id=current_admin.id,
+                        thread_id=thread_id
+                    )
+                    
+                    # Get the generated draft content
+                    draft_content = result.get("draft_content", {})
+                    draft_message = draft_content.get("message", "Draft message not available")
+                    
+                    # Format response for the assistant
+                    response_message = f"""Draft created successfully! Here's the message I generated:
+
+{draft_message}
+
+The draft has been saved and is ready for your review."""
+                    
+                    tool_outputs.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "output": json.dumps(
+                                {
+                                    "status": "success",
+                                    "message": response_message,
+                                    "campaign_id": result.get("id"),
+                                    "draft_content": draft_content,
+                                    "thread_id": thread_id
+                                }
+                            ),
+                        }
+                    )
+                    
+                    logger.info(f"Successfully created draft campaign: {result.get('id')}")
+                    
+                except Exception as e:
+                    logger.error(f"Error creating messaging draft: {str(e)}")
+                    tool_outputs.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "output": json.dumps({
+                                "status": "error",
+                                "message": f"Failed to create draft: {str(e)}"
+                            }),
+                        }
+                    )
 
             elif function_name == "query_student_chats":
-                chat_results = await campaign_service.query_student_chats(
-                    query=arguments.get("query", ""),
-                    thread_id=thread_id
-                )
+                # Keep existing query_student_chats functionality
+                try:
+                    chat_results = await campaign_service.query_student_chats(
+                        query=arguments.get("query", ""),
+                        thread_id=thread_id
+                    )
+                    tool_outputs.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "output": json.dumps({"results": chat_results}),
+                        }
+                    )
+                except Exception as e:
+                    logger.error(f"Error querying student chats: {str(e)}")
+                    tool_outputs.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "output": json.dumps({
+                                "status": "error",
+                                "message": f"Failed to query chats: {str(e)}"
+                            }),
+                        }
+                    )
+
+            # Handle legacy function name for backward compatibility
+            elif function_name == "run_campaign":
+                logger.warning("Legacy run_campaign function called - redirecting to create_messaging_draft")
+                # Map old parameters to new format
+                try:
+                    draft_request = CampaignDraftRequest(
+                        campaign_purpose=arguments.get("campaign_purpose", arguments.get("title", "")),
+                        campaign_details=arguments.get("campaign_details", ""),
+                        target_audience=arguments.get("target_audience", "all students"),
+                        tone_and_style=arguments.get("tone_and_style", "friendly and helpful"),
+                        key_points=arguments.get("key_points", ""),
+                        call_to_action=arguments.get("call_to_action", "respond with any questions"),
+                        thread_id=thread_id
+                    )
+                    
+                    result = await campaign_service.create_messaging_draft(
+                        draft_request=draft_request,
+                        admin_id=current_admin.id,
+                        thread_id=thread_id
+                    )
+                    
+                    tool_outputs.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "output": json.dumps({
+                                "status": "success",
+                                "message": f"Draft created (legacy mode). Campaign ID: {result.get('id')}",
+                                "campaign_id": result.get("id")
+                            }),
+                        }
+                    )
+                except Exception as e:
+                    tool_outputs.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "output": json.dumps({
+                                "status": "error", 
+                                "message": f"Legacy campaign creation failed: {str(e)}"
+                            }),
+                        }
+                    )
+
+            else:
+                logger.warning(f"Unknown function called: {function_name}")
                 tool_outputs.append(
                     {
                         "tool_call_id": tool_call["id"],
-                        "output": json.dumps({"results": chat_results}),
+                        "output": json.dumps({
+                            "status": "error",
+                            "message": f"Unknown function: {function_name}"
+                        }),
                     }
                 )
 

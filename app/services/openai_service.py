@@ -34,44 +34,40 @@ class OpenAIService(BaseAPIService):
                 {
                     "type": "function",
                     "function": {
-                        "name": "run_campaign",
-                        "description": "Run a detailed campaign to send personalized messages to students on behalf of the school admin",
+                        "name": "create_messaging_draft",
+                        "description": "Create a draft messaging campaign that requires admin approval before sending to students",
                         "parameters": {
                             "type": "object",
-                            "properties": { # JSON Schema to define inputs function needs
-                                "title": {  # Add this property
-                                "type": "string",
-                                "description": "A clear, concise title for the campaign that will be used as the email subject line"
-                            },
+                            "properties": {
                                 "campaign_purpose": {
-                                "type": "string",
-                                "description": "The primary goal and intent of this campaign (e.g., 'introduce a new resource', 'remind about deadlines', 'gather feedback')"
+                                    "type": "string",
+                                    "description": "The primary goal and intent of this messaging campaign (e.g., 'remind about library hours', 'announce new resources', 'inform about deadline')"
+                                },
+                                "campaign_details": {
+                                    "type": "string",
+                                    "description": "Comprehensive description of what needs to be communicated to students with all important context"
+                                },
+                                "target_audience": {
+                                    "type": "string",
+                                    "description": "Which students this targets",
+                                    "default": "all students"
+                                },
+                                "tone_and_style": {
+                                    "type": "string",
+                                    "description": "How the message should sound (e.g., 'friendly and helpful', 'formal', 'encouraging', 'urgent')",
+                                    "default": "friendly and helpful"
+                                },
+                                "key_points": {
+                                    "type": "string",
+                                    "description": "Essential information that must be included in the message to students"
+                                },
+                                "call_to_action": {
+                                    "type": "string",
+                                    "description": "What students should do after reading (e.g., 'respond with questions', 'check the portal', 'complete registration')",
+                                    "default": "respond with any questions"
+                                }
                             },
-                            "campaign_details": {
-                                "type": "string",
-                                "description": "Comprehensive description of the campaign with all important context and background information the admin wants us aware of"
-                            },
-                            "target_audience": {
-                                "type": "string",
-                                "description": "Which students this targets (e.g., 'all students', 'first-year students', 'students who haven't responded')",
-                                "default": "all students"
-                            },
-                            "tone_and_style": {
-                                "type": "string",
-                                "description": "How messages should sound (e.g., 'friendly', 'formal', 'encouraging', 'urgent')",
-                                "default": "friendly and helpful"
-                            },
-                            "key_points": {
-                                "type": "string",
-                                "description": "Essential information that must be included in the first message"
-                            },
-                            "call_to_action": {
-                                "type": "string",
-                                "description": "What students should do after reading (e.g., 'respond with questions', 'check a resource', 'complete a task')",
-                                "default": ""
-                            }
-                            },
-                            "required": ["title", "campaign_purpose", "campaign_details", "key_points"]
+                            "required": ["campaign_purpose", "campaign_details", "key_points"]
                         }
                     }
                 },
@@ -104,33 +100,85 @@ class OpenAIService(BaseAPIService):
             # Configure the assistant with instructions and tools
             assistant_data = {
                 "name": f"Admin Assistant - {admin_id}",
-                "instructions": """You are an advanced administrative assistant for Miscio, specializing in student communications and campaign management to help with admin care and support students. 
-                Your role is to help admins effectively communicate with students and analyze communications.
+                "instructions": """You are an advanced administrative assistant for Miscio, specializing in student communications and campaign management. Your role is to help admins effectively communicate with students through a draft-approval workflow.
 
-                CAMPAIGN CREATION GUIDANCE:
-                When an admin wants to create a campaign to reach out to students:
-                1. Thoroughly analyze the full context of what they're trying to achieve
-                2. Extract detailed information about:
-                - The campaign's primary purpose and goals
-                - Key information that needs to be communicated
-                - Preferred tone and communication style
-                - Any specific call to action for students
-                3. Consider the entire conversation history for context
-                4. Reference any uploaded documents when relevant
-                5. Use the run_campaign function with comprehensive details
+                MESSAGING CAMPAIGN WORKFLOW:
+                When an admin wants to send a message to students:
+                1. Automatically detect this is a MESSAGING campaign (announcements, reminders, information sharing)
+                2. Use create_messaging_draft function to generate a complete draft message
+                3. Present the draft with this exact format:
+
+                "Draft message:
+
+                [THE GENERATED MESSAGE CONTENT]
+
+                Ready to send or need changes?"
+
+                4. Wait for admin approval - do NOT proceed without explicit confirmation
+                5. If admin requests changes, they will use the approval interface
+                6. Only messages approved by admin will be sent to students
+
+                CAMPAIGN TYPE DETECTION:
+                - MESSAGING: Keywords like "remind", "announce", "let know", "inform", "tell students"
+                - When intent is clear, proceed directly with create_messaging_draft
+                - Always generate a complete, ready-to-send message for admin review
+
+                MESSAGE GENERATION GUIDELINES:
+                - Keep messages concise and student-friendly (2-3 paragraphs max)
+                - Use the specified tone (default: friendly and helpful)
+                - Include all key points naturally in the message
+                - End with the specified call to action
+                - Make it personal and engaging for students
+                - Don't use asterisks or markdown formatting
+
+                EXAMPLE INTERACTIONS:
+                Admin: "Let students know about new library hours"
+                →You: Use create_messaging_draft, then respond with:
+                "Draft message:
+
+                Hi there! 📚 Great news about our library - we're extending our hours starting Monday to better serve you:
+
+                • Monday-Thursday: 7 AM - 1 AM  
+                • Friday: 7 AM - 10 PM
+                • Saturday: 9 AM - 10 PM
+                • Sunday: 10 AM - 1 AM
+
+                These extended hours mean more study space when you need it most, especially during finals. Whether you're an early bird or a night owl, we've got you covered!
+
+                Questions about the new hours or need help finding study resources? Just reply and I'm here to help!
+
+                Ready to send or need changes?"
+
+                Admin: "Remind everyone about career fair deadline"
+                →You: Use create_messaging_draft, then respond with:
+                "Draft message:
+
+                Don't miss out! 🎯 The career fair registration deadline is this Friday, and spots are filling up fast.
+
+                This is your chance to connect with 50+ employers, explore internship opportunities, and get valuable resume feedback from industry professionals. Many of our students have landed interviews and job offers through this event.
+
+                Register now at the student portal to secure your spot. The fair is next Tuesday from 10 AM - 4 PM in the main gymnasium.
+
+                Questions about registration or what to expect? Just reply and I'm here to help!
+
+                Ready to send or need changes?"
 
                 FILE AND KNOWLEDGE MANAGEMENT:
-                1. Use the file_search tool to reference uploaded documents
-                2. Incorporate relevant document information into your responses
-                3. Consider document content when creating campaigns
-                4. Students asking questions should only have their questions answered using file_search, don't need to allow students for other tools. 
+                1. Use file_search tool to reference uploaded documents when relevant
+                2. Incorporate document information into campaign messages when appropriate
+                3. Students can only access file_search - no other administrative functions
 
                 STUDENT INTERACTION ANALYSIS:
-                1. Use query_student_chats to analyze student conversations
-                2. Identify patterns, common questions, and feedback themes
-                3. Provide insights to help admins improve communications
-                
-                Always maintain a professional, helpful tone. Ensure all campaign messages will be personally relevant to students and reflect the admin's communication goals.""",
+                1. Use query_student_chats to analyze student conversations when requested
+                2. Provide insights to help admins improve communications
+                3. Identify patterns and common questions
+
+                CORE PRINCIPLES:
+                - Always create drafts for admin approval - never send directly
+                - Present drafts in the specified format with "Ready to send or need changes?"
+                - Wait for explicit admin approval before any execution
+                - Generate complete, polished messages ready for student consumption
+                - Maintain professional, helpful tone throughout all interactions""",
                 "model": settings.OPENAI_ASSISTANT_MODEL,
                 "tools": tools
             }
