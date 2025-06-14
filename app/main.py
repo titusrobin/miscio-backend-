@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings # config settings
 from app.db.mongodb import db
+from datetime import datetime
 from app.api.v1.api import router as api_router # organizing api endpoints
 from app.api.v1.endpoints.auth import router as auth_router
 from app.api.v1.endpoints.chat import router as chat_router

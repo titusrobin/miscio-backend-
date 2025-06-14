@@ -948,7 +948,13 @@ class OpenAIService(BaseAPIService):
             thread_id = thread_data["id"]
             
             # Prepare the prompt for the loading assistant
-            loading_prompt = f"""Here's the admin's message: {user_prompt}"""
+            loading_prompt = f"""Generate ONLY a JSON array of 15-20 fun loading messages for this admin request: {user_prompt}
+
+    CRITICAL: Return ONLY the JSON array, no explanations, no markdown, no extra text.
+
+    Format: ["message1", "message2", ...]
+
+    Make messages contextual to the request but keep them engaging and fun with emojis."""
             
             # Send message to loading assistant
             message_response = await self.make_request(
@@ -996,21 +1002,16 @@ class OpenAIService(BaseAPIService):
                             message_content = messages_response["data"][0].get("content", [])
                             if message_content and message_content[0].get("type") == "text":
                                 response_text = message_content[0]["text"]["value"]
-                                logger.info(f"Loading assistant response: {response_text}")
+                                logger.info(f"Loading assistant raw response: {response_text}")
                                 
-                                # Parse JSON response
-                                try:
-                                    import json
-                                    loading_messages = json.loads(response_text)
-                                    if isinstance(loading_messages, list):
-                                        logger.info(f"Successfully generated {len(loading_messages)} loading messages")
-                                        return loading_messages
-                                    else:
-                                        logger.warning("Loading assistant didn't return a list")
-                                        return self._get_fallback_messages()
-                                except json.JSONDecodeError as e:
-                                    logger.error(f"Failed to parse loading messages JSON: {str(e)}")
-                                    logger.error(f"Raw response: {response_text}")
+                                # Extract JSON from response that might have extra text
+                                loading_messages = self._extract_json_from_response(response_text)
+                                
+                                if loading_messages and isinstance(loading_messages, list):
+                                    logger.info(f"Successfully generated {len(loading_messages)} loading messages")
+                                    return loading_messages
+                                else:
+                                    logger.warning("Loading assistant didn't return a valid JSON array")
                                     return self._get_fallback_messages()
                         
                         logger.error("No valid content in loading assistant response")
@@ -1037,6 +1038,71 @@ class OpenAIService(BaseAPIService):
         except Exception as e:
             logger.error(f"Error generating loading messages: {str(e)}")
             return self._get_fallback_messages()
+    
+    def _extract_json_from_response(self, response_text: str) -> Optional[List[str]]:
+        """
+        Extract JSON array from a response that might contain extra text.
+        """
+        try:
+            import json
+            
+            # Method 1: Try to parse the entire response as JSON
+            try:
+                result = json.loads(response_text.strip())
+                if isinstance(result, list):
+                    return result
+            except json.JSONDecodeError:
+                pass
+            
+            # Method 2: Look for JSON array markers
+            start_index = response_text.find('[')
+            end_index = response_text.rfind(']') + 1
+            
+            if start_index != -1 and end_index > start_index:
+                json_text = response_text[start_index:end_index]
+                try:
+                    result = json.loads(json_text)
+                    if isinstance(result, list):
+                        return result
+                except json.JSONDecodeError:
+                    pass
+            
+            # Method 3: Look for markdown code blocks
+            import re
+            json_match = re.search(r'```(?:json)?\s*(\[.*?\])\s*```', response_text, re.DOTALL)
+            if json_match:
+                try:
+                    result = json.loads(json_match.group(1))
+                    if isinstance(result, list):
+                        return result
+                except json.JSONDecodeError:
+                    pass
+            
+            # Method 4: Look for lines that start with quotes (individual array items)
+            lines = response_text.split('\n')
+            extracted_messages = []
+            for line in lines:
+                line = line.strip()
+                # Look for lines that look like JSON array items
+                if line.startswith('"') and line.endswith('",') or line.endswith('"'):
+                    try:
+                        # Clean up the line to be valid JSON
+                        clean_line = line.rstrip(',')
+                        message = json.loads(clean_line)
+                        if isinstance(message, str):
+                            extracted_messages.append(message)
+                    except:
+                        continue
+            
+            if extracted_messages:
+                return extracted_messages
+                
+            logger.warning(f"Could not extract JSON from response: {response_text[:200]}...")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error extracting JSON: {str(e)}")
+            return None
 
     def _get_fallback_messages(self) -> List[str]:
         """

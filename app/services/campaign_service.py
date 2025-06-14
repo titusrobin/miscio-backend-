@@ -530,134 +530,203 @@ class CampaignService:
             )
 
     async def _approve_and_execute(self, campaign: dict, approval_request: CampaignApprovalRequest, admin_id: str) -> Dict:
-        """Approve and execute a messaging campaign"""
+        """Approve and execute a campaign (messaging or feedback)"""
         try:
             async with await self.db.client.start_session() as session:
                 async with session.start_transaction():
                     
-                    # Determine final content (modified or original draft)
-                    draft_content = campaign.get("draft_content", {})
-                    final_message = approval_request.modified_message or draft_content.get("message")
-                    final_subject = approval_request.modified_subject or draft_content.get("subject")
+                    campaign_type = campaign.get("type", CampaignType.MESSAGING.value)
                     
-                    if not final_message:
-                        raise Exception("No message content available for execution")
-                    
-                    # Create approved content
-                    approved_content = ApprovedContent(
-                        message=final_message,
-                        subject=final_subject,
-                        approved_by=admin_id,
-                        modifications_from_draft=approval_request.modified_message or approval_request.modified_subject
-                    )
-                    
-                    # Update campaign to executing status
-                    await self.db.campaigns.update_one(
-                        {"_id": safe_object_id(campaign["_id"])},
-                        {
-                            "$set": {
-                                "status": CampaignStatus.EXECUTING.value,
-                                "approved_content": approved_content.dict(),
-                                "executed_at": datetime.utcnow()
-                            },
-                            "$push": {
-                                "approval_history": {
-                                    "action": "approved",
-                                    "timestamp": datetime.utcnow(),
-                                    "admin_id": admin_id,
-                                    "notes": approval_request.notes or "Campaign approved and executing"
+                    if campaign_type == CampaignType.FEEDBACK.value:
+                        # FEEDBACK CAMPAIGN EXECUTION
+                        logger.info(f"Executing feedback campaign: {campaign['_id']}")
+                        
+                        # Create approved content for feedback campaigns
+                        approved_content = ApprovedContent(
+                            message="Feedback campaign initiated",  # Placeholder message
+                            subject="Feedback Request",
+                            approved_by=admin_id,
+                            modifications_from_draft=None
+                        )
+                        
+                        # Update campaign to executing status
+                        await self.db.campaigns.update_one(
+                            {"_id": safe_object_id(campaign["_id"])},
+                            {
+                                "$set": {
+                                    "status": CampaignStatus.EXECUTING.value,
+                                    "approved_content": approved_content.dict(),
+                                    "executed_at": datetime.utcnow()
+                                },
+                                "$push": {
+                                    "approval_history": {
+                                        "action": "approved",
+                                        "timestamp": datetime.utcnow(),
+                                        "admin_id": admin_id,
+                                        "notes": approval_request.notes or "Feedback campaign approved and executing"
+                                    }
                                 }
-                            }
-                        },
-                        session=session
-                    )
+                            },
+                            session=session
+                        )
+                        
+                        # For feedback campaigns, we don't send immediate messages
+                        # Instead, we mark it as ready for conversational feedback collection
+                        execution_summary = {
+                            "total_students": 0,  # Will be populated when students start conversations
+                            "feedback_questions": len(campaign.get("questions", [])),
+                            "execution_date": datetime.utcnow(),
+                            "campaign_type": "feedback",
+                            "status": "ready_for_conversations"
+                        }
+                        
+                        # Update campaign to completed (ready state)
+                        await self.db.campaigns.update_one(
+                            {"_id": safe_object_id(campaign["_id"])},
+                            {
+                                "$set": {
+                                    "status": CampaignStatus.COMPLETED.value,
+                                    "completed_at": datetime.utcnow(),
+                                    "execution_summary": execution_summary
+                                }
+                            },
+                            session=session
+                        )
+                        
+                        logger.info(f"Feedback campaign {campaign['_id']} is now ready for student conversations")
+                        
+                        return {
+                            "status": "success",
+                            "message": f"Feedback campaign is now active! Students can start conversations to provide feedback on the {len(campaign.get('questions', []))} research questions.",
+                            "campaign_id": str(campaign["_id"]),
+                            "execution_summary": execution_summary
+                        }
                     
-                    # Get all active students for this admin
-                    students = await self.db.students.find(
-                        {"admin_id": admin_id, "status": "active"}, 
-                        session=session
-                    ).to_list(length=None)
-                    
-                    logger.info(f"Executing campaign for {len(students)} students")
-                    
-                    # Execute campaign - send to all students
-                    successful_messages = 0
-                    failed_messages = 0
-                    
-                    for student in students:
-                        try:
-                            contact_method = student.get('preferred_contact_method', 'email')
-                            
-                            if contact_method == 'email' and student.get('email'):
-                                await self.sendgrid_service.send_message(
-                                    to_email=student["email"],
-                                    subject=final_subject or "Message from Your School",
+                    else:
+                        # MESSAGING CAMPAIGN EXECUTION (existing logic)
+                        # Determine final content (modified or original draft)
+                        draft_content = campaign.get("draft_content", {})
+                        final_message = approval_request.modified_message or draft_content.get("message")
+                        final_subject = approval_request.modified_subject or draft_content.get("subject")
+                        
+                        if not final_message:
+                            raise Exception("No message content available for execution")
+                        
+                        # Create approved content
+                        approved_content = ApprovedContent(
+                            message=final_message,
+                            subject=final_subject,
+                            approved_by=admin_id,
+                            modifications_from_draft=approval_request.modified_message or approval_request.modified_subject
+                        )
+                        
+                        # Update campaign to executing status
+                        await self.db.campaigns.update_one(
+                            {"_id": safe_object_id(campaign["_id"])},
+                            {
+                                "$set": {
+                                    "status": CampaignStatus.EXECUTING.value,
+                                    "approved_content": approved_content.dict(),
+                                    "executed_at": datetime.utcnow()
+                                },
+                                "$push": {
+                                    "approval_history": {
+                                        "action": "approved",
+                                        "timestamp": datetime.utcnow(),
+                                        "admin_id": admin_id,
+                                        "notes": approval_request.notes or "Campaign approved and executing"
+                                    }
+                                }
+                            },
+                            session=session
+                        )
+                        
+                        # Get all active students for this admin
+                        students = await self.db.students.find(
+                            {"admin_id": admin_id, "status": "active"}, 
+                            session=session
+                        ).to_list(length=None)
+                        
+                        logger.info(f"Executing messaging campaign for {len(students)} students")
+                        
+                        # Execute campaign - send to all students
+                        successful_messages = 0
+                        failed_messages = 0
+                        
+                        for student in students:
+                            try:
+                                contact_method = student.get('preferred_contact_method', 'email')
+                                
+                                if contact_method == 'email' and student.get('email'):
+                                    await self.sendgrid_service.send_message(
+                                        to_email=student["email"],
+                                        subject=final_subject or "Message from Your School",
+                                        message=final_message,
+                                        message_type="initial"
+                                    )
+                                    contact_used = "email"
+                                    
+                                elif student.get('phone'):
+                                    await self.twilio_service.send_message(
+                                        student["phone"], 
+                                        final_message
+                                    )
+                                    contact_used = "whatsapp"
+                                    
+                                else:
+                                    logger.warning(f"No valid contact method for student {student['_id']}")
+                                    failed_messages += 1
+                                    continue
+                                
+                                # Record interaction
+                                await self._record_student_interaction(
+                                    campaign_id=str(campaign["_id"]),
+                                    student_id=str(student["_id"]),
                                     message=final_message,
-                                    message_type="initial"
+                                    contact_method=contact_used,
+                                    interaction_type="initial",
+                                    email_subject=final_subject if contact_used == "email" else None,
+                                    session=session,
+                                    admin_id=admin_id
                                 )
-                                contact_used = "email"
                                 
-                            elif student.get('phone'):
-                                await self.twilio_service.send_message(
-                                    student["phone"], 
-                                    final_message
-                                )
-                                contact_used = "whatsapp"
+                                successful_messages += 1
                                 
-                            else:
-                                logger.warning(f"No valid contact method for student {student['_id']}")
+                            except Exception as e:
+                                logger.error(f"Error sending to student {student['_id']}: {str(e)}")
                                 failed_messages += 1
-                                continue
-                            
-                            # Record interaction
-                            await self._record_student_interaction(
-                                campaign_id=str(campaign["_id"]),
-                                student_id=str(student["_id"]),
-                                message=final_message,
-                                contact_method=contact_used,
-                                interaction_type="initial",
-                                email_subject=final_subject if contact_used == "email" else None,
-                                session=session,
-                                admin_id=admin_id
-                            )
-                            
-                            successful_messages += 1
-                            
-                        except Exception as e:
-                            logger.error(f"Error sending to student {student['_id']}: {str(e)}")
-                            failed_messages += 1
-                    
-                    # Create execution summary
-                    execution_summary = {
-                        "total_students": len(students),
-                        "successful_messages": successful_messages,
-                        "failed_messages": failed_messages,
-                        "execution_date": datetime.utcnow(),
-                        "message_content": final_message[:100] + "..." if len(final_message) > 100 else final_message
-                    }
-                    
-                    # Update campaign to completed
-                    await self.db.campaigns.update_one(
-                        {"_id": safe_object_id(campaign["_id"])},
-                        {
-                            "$set": {
-                                "status": CampaignStatus.COMPLETED.value,
-                                "completed_at": datetime.utcnow(),
-                                "execution_summary": execution_summary
-                            }
-                        },
-                        session=session
-                    )
-                    
-                    logger.info(f"Campaign {campaign['_id']} completed successfully: {successful_messages} sent, {failed_messages} failed")
-                    
-                    return {
-                        "status": "success",
-                        "message": f"Campaign executed successfully! Sent to {successful_messages} students.",
-                        "campaign_id": str(campaign["_id"]),
-                        "execution_summary": execution_summary
-                    }
-        
+                        
+                        # Create execution summary
+                        execution_summary = {
+                            "total_students": len(students),
+                            "successful_messages": successful_messages,
+                            "failed_messages": failed_messages,
+                            "execution_date": datetime.utcnow(),
+                            "message_content": final_message[:100] + "..." if len(final_message) > 100 else final_message
+                        }
+                        
+                        # Update campaign to completed
+                        await self.db.campaigns.update_one(
+                            {"_id": safe_object_id(campaign["_id"])},
+                            {
+                                "$set": {
+                                    "status": CampaignStatus.COMPLETED.value,
+                                    "completed_at": datetime.utcnow(),
+                                    "execution_summary": execution_summary
+                                }
+                            },
+                            session=session
+                        )
+                        
+                        logger.info(f"Messaging campaign {campaign['_id']} completed successfully: {successful_messages} sent, {failed_messages} failed")
+                        
+                        return {
+                            "status": "success",
+                            "message": f"Campaign executed successfully! Sent to {successful_messages} students.",
+                            "campaign_id": str(campaign["_id"]),
+                            "execution_summary": execution_summary
+                        }
+            
         except Exception as e:
             logger.error(f"Error executing campaign: {str(e)}")
             
@@ -687,7 +756,7 @@ class CampaignService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to execute campaign: {str(e)}"
             )
-
+    
     async def get_pending_campaigns(self, admin_id: str) -> List[Dict]:
         """Get all campaigns waiting for admin approval"""
         try:
