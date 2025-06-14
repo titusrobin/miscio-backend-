@@ -8,7 +8,7 @@ pymongo==4.6.1  # Required by motor
 
 # Authentication and Security
 python-jose[cryptography]==3.3.0  # For JWT tokens
-passlib[bcrypt]==1.7.5  # For password hashing
+passlib[bcrypt]==1.7.4  # For password hashing
 python-multipart==0.0.6  # For handling form data
 
 # Configuration and Environment
