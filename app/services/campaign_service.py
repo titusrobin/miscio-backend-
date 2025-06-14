@@ -538,13 +538,28 @@ class CampaignService:
                     campaign_type = campaign.get("type", CampaignType.MESSAGING.value)
                     
                     if campaign_type == CampaignType.FEEDBACK.value:
-                        # FEEDBACK CAMPAIGN EXECUTION
+                        # FEEDBACK CAMPAIGN EXECUTION - ENHANCED WITH EMAIL SENDING
                         logger.info(f"Executing feedback campaign: {campaign['_id']}")
+
+                        # Generate dynamic initial conversation starter message
+                        feedback_metadata = campaign.get("feedback_metadata", {})
+                        research_topic = feedback_metadata.get("research_topic", "feedback")
+                        campaign_purpose = campaign.get("description", "check in with you")
+                        conversation_style = feedback_metadata.get("conversation_style", "casual and friendly")
+                        target_audience = feedback_metadata.get("target_audience", "students")
+                        
+                        # Generate dynamic subject line based on campaign purpose
+                        subject_line = await self._generate_feedback_subject(campaign_purpose, research_topic, target_audience)
+                        
+                        # Generate dynamic initial message based on campaign context
+                        initial_message = await self._generate_feedback_initial_message(
+                            campaign_purpose, research_topic, conversation_style, target_audience
+                        )
                         
                         # Create approved content for feedback campaigns
                         approved_content = ApprovedContent(
                             message="Feedback campaign initiated",  # Placeholder message
-                            subject="Feedback Request",
+                            subject=subject_line,
                             approved_by=admin_id,
                             modifications_from_draft=None
                         )
@@ -570,14 +585,71 @@ class CampaignService:
                             session=session
                         )
                         
-                        # For feedback campaigns, we don't send immediate messages
-                        # Instead, we mark it as ready for conversational feedback collection
+                        # GET ALL ACTIVE STUDENTS AND SEND INITIAL EMAILS
+                        students = await self.db.students.find(
+                            {"admin_id": admin_id, "status": "active"}, 
+                            session=session
+                        ).to_list(length=None)
+                        
+                        logger.info(f"Executing feedback campaign for {len(students)} students")
+                        
+
+                        # Send initial emails to start conversations
+                        successful_messages = 0
+                        failed_messages = 0
+                        
+                        for student in students:
+                            try:
+                                contact_method = student.get('preferred_contact_method', 'email')
+                                
+                                if contact_method == 'email' and student.get('email'):
+                                    await self.sendgrid_service.send_message(
+                                        to_email=student["email"],
+                                        subject=subject_line,
+                                        message=initial_message,
+                                        message_type="initial"
+                                    )
+                                    contact_used = "email"
+                                    
+                                elif student.get('phone'):
+                                    await self.twilio_service.send_message(
+                                        student["phone"], 
+                                        initial_message
+                                    )
+                                    contact_used = "whatsapp"
+                                    
+                                else:
+                                    logger.warning(f"No valid contact method for student {student['_id']}")
+                                    failed_messages += 1
+                                    continue
+                                
+                                # Record interaction
+                                await self._record_student_interaction(
+                                    campaign_id=str(campaign["_id"]),
+                                    student_id=str(student["_id"]),
+                                    message=initial_message,
+                                    contact_method=contact_used,
+                                    interaction_type="feedback_initial",
+                                    email_subject=subject_line if contact_used == "email" else None,
+                                    session=session,
+                                    admin_id=admin_id
+                                )
+                                
+                                successful_messages += 1
+                                
+                            except Exception as e:
+                                logger.error(f"Error sending to student {student['_id']}: {str(e)}")
+                                failed_messages += 1
+                        
+                        # Create execution summary for feedback campaigns
                         execution_summary = {
-                            "total_students": 0,  # Will be populated when students start conversations
+                            "total_students": len(students),
+                            "successful_messages": successful_messages,
+                            "failed_messages": failed_messages,
                             "feedback_questions": len(campaign.get("questions", [])),
                             "execution_date": datetime.utcnow(),
                             "campaign_type": "feedback",
-                            "status": "ready_for_conversations"
+                            "status": "conversations_initiated"
                         }
                         
                         # Update campaign to completed (ready state)
@@ -593,17 +665,17 @@ class CampaignService:
                             session=session
                         )
                         
-                        logger.info(f"Feedback campaign {campaign['_id']} is now ready for student conversations")
+                        logger.info(f"Feedback campaign {campaign['_id']} initiated: {successful_messages} sent, {failed_messages} failed")
                         
                         return {
                             "status": "success",
-                            "message": f"Feedback campaign is now active! Students can start conversations to provide feedback on the {len(campaign.get('questions', []))} research questions.",
+                            "message": f"Feedback campaign initiated! Sent initial messages to {successful_messages} students to start conversations.",
                             "campaign_id": str(campaign["_id"]),
                             "execution_summary": execution_summary
                         }
                     
                     else:
-                        # MESSAGING CAMPAIGN EXECUTION (existing logic)
+                        # MESSAGING CAMPAIGN EXECUTION (existing logic - unchanged)
                         # Determine final content (modified or original draft)
                         draft_content = campaign.get("draft_content", {})
                         final_message = approval_request.modified_message or draft_content.get("message")
