@@ -41,6 +41,7 @@ class FeedbackQuestion(BaseModel):
     text: str
     order: int
     question_type: str = "open_ended"  # open_ended, rating, multiple_choice
+    follow_up_prompt: Optional[str] = None  # Additional prompt for deeper responses
     options: Optional[List[str]] = None  # For multiple choice questions
     required: bool = True
 
@@ -53,6 +54,9 @@ class Campaign(BaseModel):
     
     # Backward compatibility - keep existing description field
     description: str
+
+    # Enhanced feedback campaign support
+    feedback_metadata: Optional[Dict[str, Any]] = None  # Store feedback-specific data
     
     # New content management
     draft_content: Optional[DraftContent] = None

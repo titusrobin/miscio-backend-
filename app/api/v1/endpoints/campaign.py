@@ -16,6 +16,8 @@ from app.services.openai_service import OpenAIService
 from app.services.twilio_service import TwilioService
 from app.services.sendgrid_service import SendGridService
 from app.db.mongodb import db
+from app.schemas.feedback import FeedbackDraftRequest, FeedbackApprovalRequest
+
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -366,4 +368,31 @@ def validate_campaign_draft(draft_request: CampaignDraftRequest):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Key points are required"
+        )
+
+@router.post("/feedback-draft", response_model=CampaignResponse)
+async def create_feedback_draft(
+    draft_request: FeedbackDraftRequest,
+    campaign_service: CampaignService = Depends(get_campaign_service),
+    current_admin=Depends(get_current_admin_user),
+):
+    """
+    Create a draft feedback campaign with research questions that requires admin approval.
+    """
+    logger.info(f"POST /feedback-draft - Creating feedback draft: {draft_request.campaign_purpose}")
+    
+    try:
+        result = await campaign_service.create_feedback_draft(
+            draft_request=draft_request,
+            admin_id=current_admin.id,
+            thread_id=draft_request.thread_id
+        )
+        logger.info(f"Feedback draft campaign created successfully: {result['id']}")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error creating feedback draft: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create feedback draft: {str(e)}"
         )

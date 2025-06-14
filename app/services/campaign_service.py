@@ -10,6 +10,8 @@ from app.services.twilio_service import TwilioService
 from app.services.sendgrid_service import SendGridService  
 from app.models.campaign import CampaignType, CampaignStatus, DraftContent, ApprovedContent, ApprovalAction
 from app.schemas.campaign import CampaignDraftRequest, CampaignApprovalRequest
+from app.schemas.feedback import FeedbackDraftRequest, GeneratedQuestion
+from app.models.campaign import FeedbackQuestion
 
 import logging
 logger = logging.getLogger(__name__)
@@ -936,4 +938,218 @@ class CampaignService:
         # Return minimal valid outputs to satisfy the API
         return [{"tool_call_id": call["id"], "output": "{}"} for call in tool_calls]
 
-    
+    async def create_feedback_draft(
+    self, 
+    draft_request: FeedbackDraftRequest, 
+    admin_id: str, 
+    thread_id: str = None
+) -> Dict:
+        """Create a draft feedback campaign with research questions that requires admin approval"""
+        logger.info(f"Creating feedback campaign draft: {draft_request.campaign_purpose}")
+        
+        try:
+            # Generate or process questions
+            if draft_request.admin_provided_questions:
+                # Admin provided questions - format them
+                questions = await self._process_admin_questions(
+                    draft_request.admin_provided_questions,
+                    draft_request.conversation_style
+                )
+                question_source = "admin_provided"
+            else:
+                # Generate questions using AI
+                questions = await self._generate_research_questions(
+                    draft_request, 
+                    admin_id
+                )
+                question_source = "ai_generated"
+            
+            # Create campaign data
+            campaign_data = {
+                "type": CampaignType.FEEDBACK.value,
+                "status": CampaignStatus.DRAFT.value,
+                "description": draft_request.research_topic,
+                "admin_id": admin_id,
+                "thread_id": thread_id,
+                "questions": [q.dict() for q in questions],
+                "feedback_metadata": {
+                    "research_topic": draft_request.research_topic,
+                    "conversation_style": draft_request.conversation_style,
+                    "target_audience": draft_request.target_audience,
+                    "question_source": question_source,
+                    "total_questions": len(questions)
+                },
+                "approval_history": [{
+                    "action": "created_draft",
+                    "timestamp": datetime.utcnow(),
+                    "admin_id": admin_id,
+                    "notes": f"Feedback draft created for: {draft_request.campaign_purpose}"
+                }],
+                "created_at": datetime.utcnow()
+            }
+            
+            # Store in database
+            result = await self.db.campaigns.insert_one(campaign_data)
+            campaign_data["id"] = str(result.inserted_id)
+            
+            logger.info(f"Created feedback draft campaign with ID: {campaign_data['id']}")
+            return campaign_data
+            
+        except Exception as e:
+            logger.error(f"Error creating feedback draft: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create feedback draft: {str(e)}"
+            )
+
+    async def _process_admin_questions(
+        self, 
+        admin_questions: List[str], 
+        conversation_style: str
+    ) -> List[GeneratedQuestion]:
+        """Process admin-provided questions into structured format"""
+        try:
+            processed_questions = []
+            
+            for i, question_text in enumerate(admin_questions):
+                # Create structured question object
+                question = GeneratedQuestion(
+                    text=question_text.strip(),
+                    question_type="open_ended",  # Default type for admin questions
+                    order=i + 1
+                )
+                processed_questions.append(question)
+            
+            logger.info(f"Processed {len(processed_questions)} admin-provided questions")
+            return processed_questions
+            
+        except Exception as e:
+            logger.error(f"Error processing admin questions: {str(e)}")
+            raise Exception(f"Failed to process admin questions: {str(e)}")
+
+    async def _generate_research_questions(
+        self, 
+        draft_request: FeedbackDraftRequest, 
+        admin_id: str
+    ) -> List[GeneratedQuestion]:
+        """Generate research questions using OpenAI based on the feedback request"""
+        try:
+            # Create a question generation prompt
+            prompt = f"""Generate 4-6 comprehensive research questions for gathering student feedback.
+
+    Research Topic: {draft_request.research_topic}
+    Purpose: {draft_request.campaign_purpose}
+    Conversation Style: {draft_request.conversation_style}
+    Target Audience: {draft_request.target_audience}
+
+    Requirements:
+    - Create questions that will gather actionable insights
+    - Mix question types: ratings with explanations, open-ended, specific examples
+    - Frame questions conversationally (not robotic survey style)
+    - Include follow-up prompts where helpful
+    - Cover both current state and improvement suggestions
+    - Ensure comprehensive coverage of the research topic
+
+    Return ONLY a JSON array of questions in this format:
+    [
+    {{
+        "text": "Rate your overall satisfaction with [topic] from 1-10",
+        "question_type": "rating",
+        "follow_up_prompt": "Please explain your rating"
+    }},
+    {{
+        "text": "What specific aspects of [topic] work well for you?",
+        "question_type": "open_ended",
+        "follow_up_prompt": "Can you give specific examples?"
+    }}
+    ]
+
+    Generate 4-6 questions that comprehensively cover: {draft_request.research_topic}"""
+
+            # Use OpenAI Chat Completions API directly
+            headers = {
+                "Authorization": f"Bearer {self.openai_service.headers['Authorization'].split(' ')[1]}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "model": "gpt-4-turbo-preview",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 1000,
+                "temperature": 0.7
+            }
+            
+            response = await self.openai_service.make_request(
+                method="POST",
+                url="https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                data=data
+            )
+            
+            if response and "choices" in response and len(response["choices"]) > 0:
+                questions_json = response["choices"][0]["message"]["content"].strip()
+                
+                # Parse JSON response
+                try:
+                    import json
+                    questions_data = json.loads(questions_json)
+                    
+                    # Convert to GeneratedQuestion objects
+                    generated_questions = []
+                    for i, q_data in enumerate(questions_data):
+                        question = GeneratedQuestion(
+                            text=q_data.get("text", ""),
+                            question_type=q_data.get("question_type", "open_ended"),
+                            follow_up_prompt=q_data.get("follow_up_prompt"),
+                            order=i + 1
+                        )
+                        generated_questions.append(question)
+                    
+                    logger.info(f"Generated {len(generated_questions)} research questions")
+                    return generated_questions
+                    
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse questions JSON: {str(e)}")
+                    logger.error(f"Raw response: {questions_json}")
+                    return self._generate_fallback_questions(draft_request)
+            else:
+                logger.warning("No response from OpenAI for question generation")
+                return self._generate_fallback_questions(draft_request)
+                
+        except Exception as e:
+            logger.error(f"Error generating research questions: {str(e)}")
+            return self._generate_fallback_questions(draft_request)
+
+    def _generate_fallback_questions(self, draft_request: FeedbackDraftRequest) -> List[GeneratedQuestion]:
+        """Generate basic fallback questions when AI generation fails"""
+        topic = draft_request.research_topic
+        
+        fallback_questions = [
+            GeneratedQuestion(
+                text=f"How would you rate your overall experience with {topic} on a scale of 1-10?",
+                question_type="rating",
+                follow_up_prompt="Please explain your rating",
+                order=1
+            ),
+            GeneratedQuestion(
+                text=f"What aspects of {topic} work well for you?",
+                question_type="open_ended",
+                follow_up_prompt="Can you give specific examples?",
+                order=2
+            ),
+            GeneratedQuestion(
+                text=f"What would you change or improve about {topic}?",
+                question_type="open_ended",
+                follow_up_prompt="What would make the biggest difference?",
+                order=3
+            ),
+            GeneratedQuestion(
+                text=f"Would you recommend {topic} to other students?",
+                question_type="open_ended",
+                follow_up_prompt="Why or why not?",
+                order=4
+            )
+        ]
+        
+        logger.info(f"Using {len(fallback_questions)} fallback questions")
+        return fallback_questions

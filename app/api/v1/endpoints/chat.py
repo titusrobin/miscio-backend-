@@ -446,6 +446,81 @@ The draft has been saved and is ready for your review."""
                             }),
                         }
                     )
+            
+            elif function_name == "create_feedback_draft":
+                # Create feedback campaign draft using new workflow
+                try:
+                    # Import feedback schema
+                    from app.schemas.feedback import FeedbackDraftRequest
+                    
+                    # Create FeedbackDraftRequest from arguments
+                    draft_request = FeedbackDraftRequest(
+                        campaign_purpose=arguments.get("campaign_purpose", ""),
+                        research_topic=arguments.get("research_topic", ""),
+                        target_audience=arguments.get("target_audience", "all students"),
+                        conversation_style=arguments.get("conversation_style", "casual and friendly"),
+                        admin_provided_questions=arguments.get("admin_provided_questions", []),
+                        thread_id=thread_id
+                    )
+                    
+                    # Create the feedback draft campaign
+                    result = await campaign_service.create_feedback_draft(
+                        draft_request=draft_request,
+                        admin_id=current_admin.id,
+                        thread_id=thread_id
+                    )
+                    
+                    # Format response for the assistant
+                    questions = result.get("questions", [])
+                    question_source = result.get("feedback_metadata", {}).get("question_source", "generated")
+                    
+                    if question_source == "admin_provided":
+                        # Admin provided questions - ask for confirmation/additions
+                        question_list = "\n".join([f"{i+1}. {q['text']}" for i, q in enumerate(questions)])
+                        response_message = f"""I'll cover these questions conversationally:
+
+            {question_list}
+
+            Should I add any additional questions, or start the feedback campaign?"""
+                    else:
+                        # AI generated questions - ask for approval
+                        question_list = "\n".join([f"{i+1}. {q['text']}" for i, q in enumerate(questions)])
+                        response_message = f"""Research questions:
+
+            {question_list}
+
+            Proceed with these questions?"""
+                    
+                    tool_outputs.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "output": json.dumps(
+                                {
+                                    "status": "success",
+                                    "message": response_message,
+                                    "campaign_id": result.get("id"),
+                                    "campaign_type": "feedback",
+                                    "questions": questions,
+                                    "thread_id": thread_id
+                                },
+                                default=str
+                            ),
+                        }
+                    )
+                    
+                    logger.info(f"Successfully created feedback draft campaign: {result.get('id')}")
+                    
+                except Exception as e:
+                    logger.error(f"Error creating feedback draft: {str(e)}")
+                    tool_outputs.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "output": json.dumps({
+                                "status": "error",
+                                "message": f"Failed to create feedback draft: {str(e)}"
+                            }),
+                        }
+                    )
 
             elif function_name == "query_student_chats":
                 # Keep existing query_student_chats functionality
