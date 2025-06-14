@@ -7,6 +7,8 @@ from app.db.mongodb import db
 from app.api.v1.api import router as api_router # organizing api endpoints
 from app.api.v1.endpoints.auth import router as auth_router
 from app.api.v1.endpoints.chat import router as chat_router
+from app.api.v1.endpoints.feedback import router as feedback_router
+
 
 # Logging track events when program runs. Instead of using print() statements
 # Output messages with different severity levels and destinations (console, files, etc.)
@@ -57,3 +59,4 @@ async def health_check():
 # along with the function that handles requests to that path.
 # Routers are a way to organize related routes together. Think of them like departments in a company.
 app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(feedback_router, prefix=f"{settings.API_V1_STR}/feedback", tags=["feedback"])

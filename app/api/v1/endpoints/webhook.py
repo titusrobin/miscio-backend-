@@ -12,6 +12,9 @@ import json
 from bson import ObjectId
 from typing import Dict, List
 from app.services.campaign_service import CampaignService
+from app.services.feedback_conversation import FeedbackConversationService
+from app.models.feedback_conversation import ConversationStatus
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -30,6 +33,12 @@ def get_campaign_service(
     sendgrid_service: SendGridService = Depends(get_sendgrid_service)
 ):
     return CampaignService(openai_service, twilio_service, sendgrid_service, db.db)
+
+def get_feedback_conversation_service(
+    openai_service: OpenAIService = Depends(get_openai_service)
+):
+    return FeedbackConversationService(db.db, openai_service)
+
 
 #TODO: Twilio webhook coverage 
 @router.post("/webhook")
@@ -203,11 +212,16 @@ async def handle_email_webhook(
         logger.info(f"[REQ-{request_id}] Found student: {student_name} (ID: {student_id})")
         logger.info(f"[REQ-{request_id}] Student thread_id: {student_thread_id}")
         
-        # Get active campaign
+        # Updated campaign query to handle new status system
         campaign = await db.db.campaigns.find_one({
-            "status": "active", 
-            "admin_id": str(student["admin_id"])
-        })
+            "$or": [
+                # New system: look for executing or completed campaigns
+                {"admin_id": str(student["admin_id"]), "status": {"$in": ["executing", "completed"]}},
+                # Legacy system: look for active campaigns
+                {"admin_id": str(student["admin_id"]), "status": "active"}
+            ]
+        }, sort=[("created_at", -1)])  # Get most recent campaign
+        
         if not campaign:
             logger.warning("No active campaign found")
             raise HTTPException(
@@ -218,8 +232,9 @@ async def handle_email_webhook(
         campaign_id = str(campaign.get("_id", "unknown"))
         campaign_desc = campaign.get("description", "No description")
         campaign_assistant_id = campaign.get("assistant_id", "None")
+        campaign_type = campaign.get("type", "messaging")
         logger.info(f"[REQ-{request_id}] Found active campaign: {campaign_desc[:50]}...")
-        logger.info(f"[REQ-{request_id}] Campaign ID: {campaign_id}")
+        logger.info(f"[REQ-{request_id}] Campaign ID: {campaign_id}, Type: {campaign_type}")
         logger.info(f"[REQ-{request_id}] Campaign assistant_id: {campaign_assistant_id}")
 
         # Get admin associated with the campaign
@@ -237,106 +252,196 @@ async def handle_email_webhook(
         vector_store_id = admin.get("vector_store_id")
         logger.info(f"[REQ-{request_id}] Admin vector store ID: {vector_store_id}")
 
-        # Process message with OpenAI
-        try:
-            if not student.get('thread_id'):
-                thread_data = await openai_service.create_thread()
-                thread_id = thread_data["id"]
-                
-                await db.db.students.update_one(
-                    {"_id": student["_id"]},
-                    {"$set": {"thread_id": thread_id}}
-                )
-                
-                logger.info(f"Created new thread for student: {thread_id}")
-            else:
-                thread_id = student["thread_id"]
-                logger.info(f"Using existing thread_id: {thread_id}")
+        # Ensure student has thread_id
+        if not student.get('thread_id'):
+            thread_data = await openai_service.create_thread()
+            thread_id = thread_data["id"]
             
-            if not campaign_assistant_id:
-                logger.warning(f"[REQ-{request_id}] Campaign has no assistant_id. Will need to create one.")
+            await db.db.students.update_one(
+                {"_id": student["_id"]},
+                {"$set": {"thread_id": thread_id}}
+            )
             
-            # Get assistant ID with proper fallbacks
-            assistant_id = campaign.get("assistant_id") or admin.get("assistant_id") or "asst_re59LKPfW1Fya4rwuoxVHKOa"
-            logger.info(f"Using assistant ID: {assistant_id}")
-            logger.info(f"Message content (first 100 chars): {text_content[:100] if text_content else ''}")
-            
-            # If vector store exists, attach it to the thread for this run
-            thread_tool_resources = None
-            if vector_store_id:
-                logger.info(f"Attaching vector store {vector_store_id} to thread {thread_id}")
-                thread_tool_resources = {
-                    "file_search": {
-                        "vector_store_ids": [vector_store_id]
-                    }
+            logger.info(f"Created new thread for student: {thread_id}")
+        else:
+            thread_id = student["thread_id"]
+            logger.info(f"Using existing thread_id: {thread_id}")
+        
+        if not campaign_assistant_id:
+            logger.warning(f"[REQ-{request_id}] Campaign has no assistant_id. Will need to create one.")
+        
+        # Get assistant ID with proper fallbacks
+        assistant_id = campaign.get("assistant_id") or admin.get("assistant_id") or "asst_re59LKPfW1Fya4rwuoxVHKOa"
+        logger.info(f"Using assistant ID: {assistant_id}")
+        logger.info(f"Message content (first 100 chars): {text_content[:100] if text_content else ''}")
+        
+        # If vector store exists, attach it to the thread for this run
+        thread_tool_resources = None
+        if vector_store_id:
+            logger.info(f"Attaching vector store {vector_store_id} to thread {thread_id}")
+            thread_tool_resources = {
+                "file_search": {
+                    "vector_store_ids": [vector_store_id]
                 }
+            }
+            
+            # Update the thread with the vector store (ensures it's attached for this run)
+            await openai_service.make_request(
+                method="POST",
+                url=f"{openai_service.base_url}/threads/{thread_id}",
+                headers=openai_service.headers,
+                data={"tool_resources": thread_tool_resources}
+            )
+
+        # ================================================================
+        # FEEDBACK CAMPAIGN HANDLING - NEW LOGIC
+        # ================================================================
+        if campaign_type == "feedback":
+            logger.info(f"[REQ-{request_id}] Processing feedback campaign interaction")
+            
+            # Get feedback conversation service
+            feedback_service = FeedbackConversationService(db.db, openai_service)
+            
+            # Initialize or get existing conversation state
+            conversation_state = await feedback_service.get_conversation_state(
+                student_id=student_id,
+                campaign_id=campaign_id
+            )
+            
+            if not conversation_state:
+                logger.info(f"[REQ-{request_id}] Initializing new feedback conversation")
+                conversation_state = await feedback_service.initialize_conversation(
+                    student_id=student_id,
+                    campaign_id=campaign_id
+                )
+            else:
+                logger.info(f"[REQ-{request_id}] Resuming feedback conversation - {conversation_state.questions_completed}/{conversation_state.total_questions} questions completed")
+            
+            # Generate context-aware prompt for feedback conversation
+            assistant_prompt = await feedback_service.generate_assistant_prompt(
+                conversation_state=conversation_state,
+                student_message=text_content,
+                student_name=student_name
+            )
+            
+            logger.info(f"[REQ-{request_id}] Generated feedback conversation prompt")
+            
+            # Process with OpenAI using feedback-specific prompt
+            try:
+                response = await openai_service.process_message(
+                    thread_id=thread_id,
+                    message=assistant_prompt,
+                    assistant_id=assistant_id,
+                    run_handler=lambda tool_calls: handle_student_tool_calls(
+                        tool_calls, student, campaign_service
+                    ),
+                    thread_tool_resources=thread_tool_resources
+                )
                 
-                # Update the thread with the vector store (ensures it's attached for this run)
-                await openai_service.make_request(
-                    method="POST",
-                    url=f"{openai_service.base_url}/threads/{thread_id}",
-                    headers=openai_service.headers,
-                    data={"tool_resources": thread_tool_resources}
+                # Analyze the student's response (not the assistant prompt)
+                response_analysis = await feedback_service.analyze_student_response(
+                    response=text_content,  # The student's actual message
+                    conversation_state=conversation_state
+                )
+                
+                # Update conversation state based on analysis
+                updated_state = await feedback_service.update_conversation_state(
+                    conversation_state=conversation_state,
+                    response_analysis=response_analysis,
+                    student_response=text_content
+                )
+                
+                logger.info(f"[REQ-{request_id}] Feedback conversation updated: {updated_state.questions_completed}/{updated_state.total_questions} questions completed, Strategy: {updated_state.current_strategy}")
+                
+                # Send the response back to the student via email
+                await sendgrid_service.send_message(
+                    to_email=email_address,
+                    subject=f"Re: {subject}",
+                    message=response,
+                    message_type="reply"
+                )
+                
+            except Exception as e:
+                logger.error(f"[REQ-{request_id}] Error processing feedback conversation: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Unable to process feedback message",
                 )
 
-            # Process message with OpenAI
-            logger.info(f"Processing message with assistant {assistant_id} and thread {thread_id}")
-            response = await openai_service.process_message(
-                thread_id=thread_id,
-                message=text_content.strip(),
-                assistant_id=assistant_id,
-                run_handler=lambda tool_calls: handle_student_tool_calls(
-                    tool_calls, student, campaign_service
-                ),
-                thread_tool_resources=thread_tool_resources
-            )
+        # ================================================================
+        # MESSAGING CAMPAIGN HANDLING - EXISTING LOGIC
+        # ================================================================
+        else:
+            logger.info(f"[REQ-{request_id}] Processing messaging campaign interaction")
             
-            # Send the response back to the student via email
-            await sendgrid_service.send_message(
-                to_email=email_address,
-                subject=f"Re: {subject}",
-                message=response,
-                message_type="reply"
-            )
-            
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Unable to process message",
-            )
+            try:
+                # Process message with OpenAI (original logic)
+                response = await openai_service.process_message(
+                    thread_id=thread_id,
+                    message=text_content.strip(),
+                    assistant_id=assistant_id,
+                    run_handler=lambda tool_calls: handle_student_tool_calls(
+                        tool_calls, student, campaign_service
+                    ),
+                    thread_tool_resources=thread_tool_resources
+                )
+                
+                # Send the response back to the student via email
+                await sendgrid_service.send_message(
+                    to_email=email_address,
+                    subject=f"Re: {subject}",
+                    message=response,
+                    message_type="reply"
+                )
+                
+            except Exception as e:
+                logger.error(f"[REQ-{request_id}] Error processing messaging interaction: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Unable to process message",
+                )
 
-        # Log successful interaction in database
-        await db.db.interactions.insert_one(
-            {
-                "student_id": str(student["_id"]),
-                "campaign_id": str(campaign["_id"]),
-                "message": text_content,
-                "response": response,
-                "contact_method": "email",
-                "email_subject": subject,
-                "type": "response",
-                "status": "sent",
-                "timestamp": datetime.utcnow(),
-               # "assistant_id": campaign.get("assistant_id")  # Add the assistant_id here
-                "vector_store_used": bool(vector_store_id)
+        # ================================================================
+        # INTERACTION LOGGING - ENHANCED FOR BOTH TYPES
+        # ================================================================
+        interaction_data = {
+            "student_id": student_id,
+            "campaign_id": campaign_id,
+            "message": text_content,
+            "response": response,
+            "contact_method": "email",
+            "email_subject": subject,
+            "type": "response",
+            "status": "sent",
+            "timestamp": datetime.utcnow(),
+            "vector_store_used": bool(vector_store_id),
+            "campaign_type": campaign_type
+        }
+        
+        # Add feedback-specific fields if it's a feedback campaign
+        if campaign_type == "feedback" and 'updated_state' in locals():
+            interaction_data.update({
+                "feedback_progress": f"{updated_state.questions_completed}/{updated_state.total_questions}",
+                "conversation_strategy": updated_state.current_strategy,
+                "engagement_level": updated_state.engagement_level
+            })
 
-            }
-        )
+        await db.db.interactions.insert_one(interaction_data)
 
         end_time = datetime.utcnow()
         processing_time = (end_time - start_time).total_seconds()
-        logger.info(f"Email webhook processing completed in {processing_time} seconds")
-        return {"success, processing time": processing_time}
+        logger.info(f"[REQ-{request_id}] Email webhook processing completed in {processing_time} seconds")
+        return {"status": "success", "processing_time": processing_time, "campaign_type": campaign_type}
 
     except HTTPException as http_ex:
-        logger.error(f"HTTP Exception in email webhook: {http_ex.detail}")
+        logger.error(f"[REQ-{request_id}] HTTP Exception in email webhook: {http_ex.detail}")
         raise
 
     except Exception as e:
-        logger.error(f"Email webhook handling error: {str(e)}")
+        logger.error(f"[REQ-{request_id}] Email webhook handling error: {str(e)}")
         import traceback
         trace = traceback.format_exc()
-        logger.error(f"Stack trace:\n{trace}")
+        logger.error(f"[REQ-{request_id}] Stack trace:\n{trace}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
