@@ -1294,3 +1294,116 @@ class CampaignService:
         
         logger.info(f"Using {len(fallback_questions)} fallback questions")
         return fallback_questions
+    
+    async def _generate_feedback_subject(
+    self, 
+    campaign_purpose: str, 
+    research_topic: str, 
+    target_audience: str
+) -> str:
+        """Generate a friendly subject line for feedback campaign emails"""
+        try:
+            # Use OpenAI to generate a contextual subject line
+            prompt = f"""Create a friendly, engaging email subject line for a feedback campaign.
+
+    Campaign Purpose: {campaign_purpose}
+    Research Topic: {research_topic}
+    Target Audience: {target_audience}
+
+    Requirements:
+    - Keep it under 50 characters
+    - Make it feel personal and inviting
+    - Avoid formal language
+    - Don't use "Survey" or "Feedback" in the subject
+    - Make students want to open and respond
+
+    Return only the subject line, no quotes or extra text."""
+
+            headers = {
+                "Authorization": f"Bearer {self.openai_service.headers['Authorization'].split(' ')[1]}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "model": "gpt-4-turbo-preview",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 100,
+                "temperature": 0.7
+            }
+            
+            response = await self.openai_service.make_request(
+                method="POST",
+                url="https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                data=data
+            )
+            
+            if response and "choices" in response and len(response["choices"]) > 0:
+                subject = response["choices"][0]["message"]["content"].strip()
+                # Remove quotes if AI added them
+                subject = subject.strip('"').strip("'")
+                logger.info(f"Generated feedback subject: {subject}")
+                return subject
+            else:
+                return self._generate_fallback_feedback_subject(campaign_purpose, research_topic)
+                
+        except Exception as e:
+            logger.error(f"Error generating feedback subject: {str(e)}")
+            return self._generate_fallback_feedback_subject(campaign_purpose, research_topic)
+
+    async def _generate_feedback_initial_message(
+        self, 
+        campaign_purpose: str, 
+        research_topic: str, 
+        conversation_style: str, 
+        target_audience: str
+    ) -> str:
+        """Generate the initial conversation starter message for feedback campaigns"""
+        try:
+            prompt = f"""Create a warm, conversational email to start a feedback conversation with students.
+
+    Campaign Purpose: {campaign_purpose}
+    Research Topic: {research_topic}
+    Conversation Style: {conversation_style}
+    Target Audience: {target_audience}
+
+    Requirements:
+    - Keep it warm and conversational (2-3 paragraphs max)
+    - Don't mention "survey" or make it feel formal
+    - Explain that you'd love to chat and hear their thoughts
+    - Let them know they can just reply to this email
+    - Make it feel like a genuine check-in from someone who cares
+    - Use the specified conversation style
+    - End with an encouraging note about responding
+
+    Return only the message content, no subject line or signature."""
+
+            headers = {
+                "Authorization": f"Bearer {self.openai_service.headers['Authorization'].split(' ')[1]}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "model": "gpt-4-turbo-preview",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 400,
+                "temperature": 0.7
+            }
+            
+            response = await self.openai_service.make_request(
+                method="POST",
+                url="https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                data=data
+            )
+            
+            if response and "choices" in response and len(response["choices"]) > 0:
+                message = response["choices"][0]["message"]["content"].strip()
+                logger.info(f"Generated feedback initial message")
+                return message
+            else:
+                return self._generate_fallback_feedback_message(campaign_purpose, research_topic, conversation_style)
+                
+        except Exception as e:
+            logger.error(f"Error generating feedback initial message: {str(e)}")
+            return self._generate_fallback_feedback_message(campaign_purpose, research_topic, conversation_style)
