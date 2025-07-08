@@ -95,14 +95,19 @@ async def process_message(
             f"Admin ID: {current_admin.id}, Thread ID: {current_admin.thread_id}, Assistant ID: {current_admin.assistant_id}"
         )
 
+        # ADD THIS:
+        # Admin context instructions
+        admin_additional_instructions = "ADMIN MODE: Full administrative capabilities active."
+
+
         # Generate loading messages immediately (for testing - just log them)
-        try:
-            loading_messages = await openai_service.generate_loading_messages(content)
-            logger.info(f"Generated loading messages: {loading_messages}")
-        except Exception as e:
-            logger.error(f"Failed to generate loading messages: {str(e)}")
-            loading_messages = openai_service._get_fallback_messages()
-            logger.info(f"Using fallback messages: {loading_messages}")
+        # try:
+        #     loading_messages = await openai_service.generate_loading_messages(content)
+        #     logger.info(f"Generated loading messages: {loading_messages}")
+        # except Exception as e:
+        #     logger.error(f"Failed to generate loading messages: {str(e)}")
+        #     loading_messages = openai_service._get_fallback_messages()
+        #     logger.info(f"Using fallback messages: {loading_messages}")
 
         # Process the message with function calling support
         response = await openai_service.process_message(
@@ -235,13 +240,17 @@ async def create_message(
         content = message.get("content", "")
         
         # Generate loading messages immediately (for testing - just log them)
-        try:
-            loading_messages = await openai_service.generate_loading_messages(content)
-            logger.info(f"Generated loading messages for thread message: {loading_messages}")
-        except Exception as e:
-            logger.error(f"Failed to generate loading messages: {str(e)}")
-            loading_messages = openai_service._get_fallback_messages()
-            logger.info(f"Using fallback messages: {loading_messages}")
+        # try:
+        #     loading_messages = await openai_service.generate_loading_messages(content)
+        #     logger.info(f"Generated loading messages for thread message: {loading_messages}")
+        # except Exception as e:
+        #     logger.error(f"Failed to generate loading messages: {str(e)}")
+        #     loading_messages = openai_service._get_fallback_messages()
+        #     logger.info(f"Using fallback messages: {loading_messages}")
+
+        # ADD THIS:
+        # Admin context instructions
+        admin_additional_instructions = "ADMIN MODE: Full administrative capabilities active."
 
         response = await openai_service.process_message(
             thread_id=thread_id,
@@ -250,8 +259,9 @@ async def create_message(
             run_handler=lambda tool_calls: handle_tool_calls(
                 tool_calls, current_admin, campaign_service, thread_id
             ),
+            additional_instructions=admin_additional_instructions
         )
-
+        
         messages = [ #create message array to be stored in mongodb
             {
                 "role": "user",

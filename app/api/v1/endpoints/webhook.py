@@ -326,6 +326,10 @@ async def handle_email_webhook(
             
             logger.info(f"[REQ-{request_id}] Generated feedback conversation prompt")
             
+            # NEW: Add minimal additional instructions
+            feedback_metadata = campaign.get("feedback_metadata", {})
+            student_additional_instructions = f"STUDENT MODE: Speaking with {student_name} about {feedback_metadata.get('research_topic', 'feedback')}. Style: {feedback_metadata.get('conversation_style', 'friendly')}."
+
             # Process with OpenAI using feedback-specific prompt
             try:
                 response = await openai_service.process_message(
@@ -335,7 +339,8 @@ async def handle_email_webhook(
                     run_handler=lambda tool_calls: handle_student_tool_calls(
                         tool_calls, student, campaign_service
                     ),
-                    thread_tool_resources=thread_tool_resources
+                    thread_tool_resources=thread_tool_resources,
+                    additional_instructions=student_additional_instructions
                 )
                 
                 # Analyze the student's response (not the assistant prompt)
