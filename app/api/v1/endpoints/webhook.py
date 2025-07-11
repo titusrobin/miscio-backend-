@@ -212,7 +212,6 @@ async def handle_email_webhook(
         student_id = str(student.get("_id", "unknown"))
         student_name = f"{student.get('first_name', '')} {student.get('last_name', '')}"
         student_thread_id = student.get("thread_id", "none")
-        logger.info(f"CMP: Student found - ID: {student_id}, Name: {student_name}, Campaign: {campaign_id}")  # ADD THIS
         #logger.info(f"[REQ-{request_id}] Found student: {student_name} (ID: {student_id})")
         #logger.info(f"[REQ-{request_id}] Student thread_id: {student_thread_id}")
         
@@ -237,9 +236,11 @@ async def handle_email_webhook(
         campaign_desc = campaign.get("description", "No description")
         campaign_assistant_id = campaign.get("assistant_id", "None")
         campaign_type = campaign.get("type", "messaging")
-        logger.info(f"[REQ-{request_id}] Found active campaign: {campaign_desc[:50]}...")
-        logger.info(f"[REQ-{request_id}] Campaign ID: {campaign_id}, Type: {campaign_type}")
-        logger.info(f"[REQ-{request_id}] Campaign assistant_id: {campaign_assistant_id}")
+        logger.info(f"CMP: Student found - ID: {student_id}, Name: {student_name}, Campaign: {campaign_id}")  # ADD THIS
+
+        #logger.info(f"[REQ-{request_id}] Found active campaign: {campaign_desc[:50]}...")
+        #logger.info(f"[REQ-{request_id}] Campaign ID: {campaign_id}, Type: {campaign_type}")
+        #logger.info(f"[REQ-{request_id}] Campaign assistant_id: {campaign_assistant_id}")
 
         # Get admin associated with the campaign
         admin_id = campaign.get("admin_id")
