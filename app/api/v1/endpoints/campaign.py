@@ -42,7 +42,7 @@ async def create_campaign_draft(
     Create a draft messaging campaign that requires admin approval.
     This is the new workflow for messaging campaigns.
     """
-    logger.info(f"POST /draft - Creating campaign draft: {draft_request.campaign_purpose}")
+    #logger.info(f"POST /draft - Creating campaign draft: {draft_request.campaign_purpose}")
     
     try:
         result = await campaign_service.create_messaging_draft(
@@ -50,7 +50,7 @@ async def create_campaign_draft(
             admin_id=current_admin.id,
             thread_id=draft_request.thread_id
         )
-        logger.info(f"Draft campaign created successfully: {result['id']}")
+        #logger.info(f"Draft campaign created successfully: {result['id']}")
         return result
 
     except Exception as e:
@@ -74,7 +74,7 @@ async def approve_campaign(
     - "modify": Update the message/subject and keep as draft
     - "cancel": Cancel the campaign
     """
-    logger.info(f"POST /approve - Processing approval for campaign: {approval_request.campaign_id}")
+    #logger.info(f"POST /approve - Processing approval for campaign: {approval_request.campaign_id}")
     
     try:
         result = await campaign_service.approve_and_execute_campaign(
@@ -99,7 +99,7 @@ async def get_pending_campaigns(
     """
     Get all campaigns waiting for admin approval.
     """
-    logger.info("GET /pending - Retrieving pending campaigns")
+    #logger.info("GET /pending - Retrieving pending campaigns")
     
     try:
         campaigns = await campaign_service.get_pending_campaigns(admin_id=current_admin.id)

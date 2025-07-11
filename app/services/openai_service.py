@@ -293,7 +293,7 @@ class OpenAIService(BaseAPIService):
 
             # Create the assistant using the OpenAI API
             logger.info(f"Creating assistant for admin {admin_id} via endpoint: {self.base_url}/assistants")
-            logger.info(f"Assistant configuration: {json.dumps(assistant_data, indent=2)}")
+            #logger.info(f"Assistant configuration: {json.dumps(assistant_data, indent=2)}")
             response = await self.make_request(
                 method="POST",
                 url=f"{self.base_url}/assistants",
@@ -302,7 +302,7 @@ class OpenAIService(BaseAPIService):
             )
             
             # Create an initial thread for the assistant
-            logger.info(f"Creating initial thread via endpoint: {self.base_url}/threads")            
+            #logger.info(f"Creating initial thread via endpoint: {self.base_url}/threads")            
             thread_response = await self.make_request(
                 method="POST",
                 url=f"{self.base_url}/threads",
@@ -321,7 +321,7 @@ class OpenAIService(BaseAPIService):
 
     async def create_thread(self) -> dict:
         """Creates a new OpenAI thread for conversation management."""
-        logger.info(f"Creating new thread via endpoint: {self.base_url}/threads")
+        #logger.info(f"Creating new thread via endpoint: {self.base_url}/threads")
         try:
             response = await self.make_request(
                 method="POST",
@@ -349,10 +349,11 @@ class OpenAIService(BaseAPIService):
         1. Thread is simply a container for storing messages
         2. Run actual execution of assistant's instructions
         """
-        logger.info(f"Starting to process message in thread {thread_id}")
-        logger.info(f"Assistant ID: {assistant_id}")
-        logger.info(f"Run handler provided: {run_handler is not None}")
-        logger.info(f"Message content: {message[:100]}..." if len(message) > 100 else f"Message content: {message}")
+        logger.info(f"CMP: OpenAI processing - Thread: {thread_id}, Assistant: {assistant_id}, Message: {message[:100]}...")  # ADD THIS
+        #logger.info(f"Starting to process message in thread {thread_id}")
+        #logger.info(f"Assistant ID: {assistant_id}")
+        #logger.info(f"Run handler provided: {run_handler is not None}")
+        #logger.info(f"Message content: {message[:100]}..." if len(message) > 100 else f"Message content: {message}")
 
         try:
             # Check if assistant_id is valid and log its configuration
@@ -368,18 +369,18 @@ class OpenAIService(BaseAPIService):
                 # Check if file_search is enabled for this assistant
                 tools = assistant_response.get('tools', [])
                 has_file_search = any(tool.get('type') == 'file_search' for tool in tools)
-                logger.info(f"Assistant has file search enabled: {has_file_search}")
+                #logger.info(f"Assistant has file search enabled: {has_file_search}")
                 
                 # Log file information
                 tool_resources = assistant_response.get('tool_resources', {})
                 file_search = tool_resources.get('file_search', {})
                 vector_store_ids = file_search.get('vector_store_ids', [])
-                if vector_store_ids:
-                    logger.info(f"Assistant has vector stores: {vector_store_ids}")
+                #if vector_store_ids:
+                 #   logger.info(f"Assistant has vector stores: {vector_store_ids}")
                 
                 # Add file_search tool if not present but vector_store_ids are attached
                 if not has_file_search and vector_store_ids:
-                    logger.info(f"Adding file_search tool to assistant {assistant_id}")
+                    #logger.info(f"Adding file_search tool to assistant {assistant_id}")
                     tools.append({"type": "file_search"})
                     await self.make_request(
                         method="POST",
@@ -402,18 +403,19 @@ class OpenAIService(BaseAPIService):
                 headers=self.headers,
                 data={"role": "user", "content": message}
             )
-            logger.info(f"Created message in thread. Message ID: {message_response.get('id')}")
+            #logger.info(f"Created message in thread. Message ID: {message_response.get('id')}")
 
             # Prepare run data with thread_tool_resources if provided
             run_data = {"assistant_id": assistant_id}
             if thread_tool_resources:
                 run_data["tool_resources"] = thread_tool_resources
-                logger.info(f"Including tool resources in run: {json.dumps(thread_tool_resources, indent=2)}")
+                #logger.info(f"Including tool resources in run: {json.dumps(thread_tool_resources, indent=2)}")
 
             # NEW: Add additional_instructions if provided
             if additional_instructions:
                 run_data["additional_instructions"] = additional_instructions
-                logger.info(f"Including additional instructions for role: {'student' if 'STUDENT' in additional_instructions else 'admin'}")
+                logger.info(f"CMP: OpenAI context mode - {additional_instructions[:100]}...")  # ADD THIS
+                #logger.info(f"Including additional instructions for role: {'student' if 'STUDENT' in additional_instructions else 'admin'}")
             
             # Create and start a new run with improved error handling
             try:
@@ -424,7 +426,7 @@ class OpenAIService(BaseAPIService):
                     data=run_data
                 )
                 run_id = run_response["id"]
-                logger.info(f"Started new run with ID: {run_id}")
+                #logger.info(f"Started new run with ID: {run_id}")
                 
             except Exception as e:
                 logger.error(f"Failed to start run: {str(e)}")
@@ -445,7 +447,7 @@ class OpenAIService(BaseAPIService):
                     )
                     
                     # Log current status on each check
-                    logger.info(f"Run status check {retries+1}/{max_retries}: {status_response['status']}")
+                    #logger.info(f"Run status check {retries+1}/{max_retries}: {status_response['status']}")
                     
                 except Exception as e:
                     logger.error(f"Error checking run status: {str(e)}")
@@ -459,7 +461,7 @@ class OpenAIService(BaseAPIService):
                 if status_response["status"] == "requires_action":
                     if run_handler:
                         tool_calls = status_response["required_action"]["submit_tool_outputs"]["tool_calls"]
-                        logger.info(f"Received tool calls to process: {json.dumps(tool_calls, indent=2)}")
+                        #logger.info(f"Received tool calls to process")
                         
                         tool_outputs = await run_handler(tool_calls) # tool_calls is data from OpenAI describing what functions to call and with what parameters
                         
@@ -478,7 +480,7 @@ class OpenAIService(BaseAPIService):
                     
                 # On completion, get the final response
                 elif status_response["status"] == "completed":
-                    logger.info(f"Run completed successfully after {retries+1} checks")
+                    #logger.info(f"Run completed successfully after {retries+1} checks")
                     
                     try:                     
                         # Get run steps to check if file search was used
@@ -497,7 +499,7 @@ class OpenAIService(BaseAPIService):
                                     for tool_call in step.get("step_details").get("tool_calls", []):
                                         if tool_call.get("type") == "file_search":
                                             results = tool_call.get("file_search", {}).get("results", [])
-                                            logger.info(f"File search used in run with {len(results)} results")
+                                            #logger.info(f"File search used in run with {len(results)} results")
                         
                         messages_response = await self.make_request(
                             method="GET",
@@ -509,17 +511,17 @@ class OpenAIService(BaseAPIService):
                         # Log response details
                         if messages_response.get("data") and len(messages_response["data"]) > 0:
                             message_id = messages_response["data"][0].get("id", "unknown")
-                            logger.info(f"Retrieved message ID: {message_id}")
+                            #logger.info(f"Retrieved message ID: {message_id}")
                             
                             # Check if content exists
                             message_content = messages_response["data"][0].get("content", [])
                             if not message_content:
-                                logger.error("Message content array is empty")
+                                #logger.error("Message content array is empty")
                                 raise Exception("Empty message content returned")
                                 
                             # Check if it contains text content
                             has_text = any(content.get("type") == "text" for content in message_content)
-                            logger.info(f"Message has text content: {has_text}")
+                            #logger.info(f"Message has text content: {has_text}")
                             
                             if has_text:
                                 # Extract and return the text value
@@ -527,8 +529,8 @@ class OpenAIService(BaseAPIService):
                                                 if content.get("type") == "text" and content.get("text", {}).get("value")), None)
                                 
                                 if text_content:
-                                    logger.info(f"Response text length: {len(text_content)}")
-                                    logger.info(f"Response preview: {text_content[:100]}...")
+                                    #logger.info(f"Response text length: {len(text_content)}")
+                                    #logger.info(f"Response preview: {text_content[:100]}...")
                                     return text_content
                                 else:
                                     logger.error("No text value found in message content")
@@ -919,7 +921,7 @@ class OpenAIService(BaseAPIService):
         """
         try:
             # Get current assistant configuration
-            logger.info(f"Verifying vector store attachment for assistant {assistant_id}")
+            #logger.info(f"Verifying vector store attachment for assistant {assistant_id}")
             
             # Get current assistant configuration
             assistant_response = await self.make_request(
@@ -934,11 +936,11 @@ class OpenAIService(BaseAPIService):
             vector_store_ids = file_search.get('vector_store_ids', [])
             
             if vector_store_id in vector_store_ids:
-                logger.info(f"Vector store {vector_store_id} is already attached to assistant {assistant_id}")
+                #logger.info(f"Vector store {vector_store_id} is already attached to assistant {assistant_id}")
                 return True
                     
             # Vector store not attached, update the assistant
-            logger.info(f"Attaching vector store {vector_store_id} to assistant {assistant_id}")
+            #logger.info(f"Attaching vector store {vector_store_id} to assistant {assistant_id}")
             
             # Check if file_search is in tools
             tools = assistant_response.get('tools', [])
@@ -968,14 +970,14 @@ class OpenAIService(BaseAPIService):
             updated_vector_store_ids = updated_file_search.get('vector_store_ids', [])
             
             if vector_store_id in updated_vector_store_ids:
-                logger.info(f"Successfully attached vector store {vector_store_id} to assistant {assistant_id}")
+               #logger.info(f"Successfully attached vector store {vector_store_id} to assistant {assistant_id}")
                 return True
             else:
-                logger.warning(f"Failed to attach vector store {vector_store_id} to assistant {assistant_id}")
+               # logger.warning(f"Failed to attach vector store {vector_store_id} to assistant {assistant_id}")
                 return False
                     
         except Exception as e:
-            logger.error(f"Error ensuring vector store attachment: {str(e)}")
+            #logger.error(f"Error ensuring vector store attachment: {str(e)}")
             return False
 
     #########################################################################  
@@ -992,7 +994,7 @@ class OpenAIService(BaseAPIService):
             List of contextual loading messages to display during processing
         """
         try:
-            logger.info(f"Generating loading messages for prompt: {user_prompt[:100]}...")
+           # logger.info(f"Generating loading messages for prompt: {user_prompt[:100]}...")
             
             # Create a temporary thread for the loading assistant
             thread_data = await self.create_thread()
@@ -1014,7 +1016,7 @@ class OpenAIService(BaseAPIService):
                 headers=self.headers,
                 data={"role": "user", "content": loading_prompt}
             )
-            logger.info(f"Loading assistant message created: {message_response.get('id')}")
+          #  logger.info(f"Loading assistant message created: {message_response.get('id')}")
             
             # Create and start a run with the loading assistant
             run_response = await self.make_request(
@@ -1024,7 +1026,7 @@ class OpenAIService(BaseAPIService):
                 data={"assistant_id": settings.LOADING_ASSISTANT_ID}
             )
             run_id = run_response["id"]
-            logger.info(f"Loading assistant run started: {run_id}")
+          #  logger.info(f"Loading assistant run started: {run_id}")
             
             # Poll for completion (simplified version for loading assistant)
             max_retries = 20  # Loading assistant should be fast

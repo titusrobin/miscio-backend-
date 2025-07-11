@@ -50,7 +50,7 @@ class CampaignService:
         LEGACY METHOD - Creates a campaign using the old workflow
         Maintained for backward compatibility
         """
-        logger.info(f"Creating legacy campaign: {campaign} in thread: {thread_id}")
+        logger.info(f"CMP: Creating legacy campaign: {campaign} in thread: {thread_id}")
         try:
             async with await self.db.client.start_session() as session:
                 async with session.start_transaction():
@@ -111,6 +111,7 @@ class CampaignService:
 
     async def _execute_legacy_campaign(self, campaign_data: dict, campaign_context: dict, session):
         """Execute a legacy campaign immediately"""
+        logger.info(f"CMP: Executing legacy campaign: {campaign_data}")
         # Get students
         students = await self.db.students.find(
             {"admin_id": campaign_data["admin_id"], "status": "active"}, 
@@ -194,7 +195,8 @@ class CampaignService:
         thread_id: str = None
     ) -> Dict:
         """Create a draft messaging campaign that requires admin approval"""
-        logger.info(f"Creating messaging campaign draft: {draft_request.campaign_purpose}")
+        logger.info(f"CMP: Draft creation start - Admin: {admin_id}, Purpose: {draft_request.campaign_purpose[:50]}...")  # ADD THIS
+        # logger.info(f"Creating messaging campaign draft: {draft_request.campaign_purpose}")
         
         try:
             # Generate sample message
@@ -250,7 +252,7 @@ class CampaignService:
         admin_id: str
     ) -> Dict:
         """Approve a draft campaign and execute it"""
-        logger.info(f"Processing approval request for campaign: {approval_request.campaign_id}")
+        #logger.info(f"CMP: Processing approval request for campaign: {approval_request.campaign_id}")
         
         try:
             # Get the campaign
@@ -265,6 +267,8 @@ class CampaignService:
             if campaign["status"] != CampaignStatus.DRAFT.value:
                 raise HTTPException(status_code=400, detail=f"Campaign is not in draft status")
             
+            logger.info(f"CMP: Campaign execution start - ID: {approval_request.campaign_id}, Type: {campaign.get('type')}, Status: {campaign.get('status')}")  # ADD THIS
+
             # Handle actions
             if approval_request.action == "cancel":
                 return await self._cancel_campaign(campaign, approval_request, admin_id)
@@ -539,7 +543,7 @@ class CampaignService:
                     
                     if campaign_type == CampaignType.FEEDBACK.value:
                         # FEEDBACK CAMPAIGN EXECUTION - ENHANCED WITH EMAIL SENDING
-                        logger.info(f"Executing feedback campaign: {campaign['_id']}")
+                        logger.info(f"CMP: Executing feedback campaign: {campaign['_id']}")
 
                         # Generate dynamic initial conversation starter message
                         feedback_metadata = campaign.get("feedback_metadata", {})
@@ -636,6 +640,8 @@ class CampaignService:
                                 )
                                 
                                 successful_messages += 1
+
+                                logger.info(f"CMP: Feedback campaign {campaign['_id']} initiated: {successful_messages} sent, {failed_messages} failed")
                                 
                             except Exception as e:
                                 logger.error(f"Error sending to student {student['_id']}: {str(e)}")
@@ -1086,8 +1092,9 @@ class CampaignService:
     thread_id: str = None
 ) -> Dict:
         """Create a draft feedback campaign with research questions that requires admin approval"""
-        logger.info(f"Creating feedback campaign draft: {draft_request.campaign_purpose}")
-        
+        #logger.info(f"Creating feedback campaign draft: {draft_request.campaign_purpose}")
+        logger.info(f"CMP: Feedback draft start - Admin: {admin_id}, Topic: {draft_request.research_topic[:50]}...")  # ADD THIS
+
         try:
             # Generate or process questions
             if draft_request.admin_provided_questions:

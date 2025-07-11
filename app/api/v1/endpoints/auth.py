@@ -110,7 +110,7 @@ async def ensure_admin_has_assistant(admin: dict, openai_service: OpenAIService)
     """
     if not admin.get("assistant_id") or not admin.get("thread_id"):
         try:
-            logger.info(f"Creating new assistant for admin {admin['_id']}")
+           # logger.info(f"Creating new assistant for admin {admin['_id']}")
             assistant_data = await openai_service.create_admin_assistant(
                 str(admin["_id"])
             )
@@ -127,7 +127,7 @@ async def ensure_admin_has_assistant(admin: dict, openai_service: OpenAIService)
             )
             admin["assistant_id"] = assistant_data["assistant_id"]
             admin["thread_id"] = assistant_data["thread_id"]
-            logger.info(f"Assistant created for admin {admin['_id']}")
+           # logger.info(f"Assistant created for admin {admin['_id']}")
 
         except Exception as e:
             logger.error(f"Error creating assistant: {str(e)}")
@@ -136,9 +136,9 @@ async def ensure_admin_has_assistant(admin: dict, openai_service: OpenAIService)
                 detail="Error setting up admin assistant",
             )
     
-    logger.info(
-        f"Admin assistant_id: {admin['assistant_id']}, thread_id: {admin['thread_id']}"
-    )
+    #logger.info(
+        #f"Admin assistant_id: {admin['assistant_id']}, thread_id: {admin['thread_id']}"
+    #)
     
     return admin
 
@@ -156,7 +156,7 @@ async def create_admin_token_response(admin: dict) -> dict:
         },
         expires_delta=access_token_expires,
     )
-    logger.info(f"Access token created for admin {admin['username']}")
+    #logger.info(f"Access token created for admin {admin['username']}")
 
     return {
         "access_token": access_token,

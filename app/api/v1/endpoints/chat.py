@@ -51,7 +51,7 @@ async def get_chat_history(thread_id: str,
     """
     Retrieve chat history for a specific thread.
     """
-    logger.info(f"GET /history/{thread_id} - Retrieving chat history")
+    #logger.info(f"GET /history/{thread_id} - Retrieving chat history")
     try:
         chat_history = await db.db.admin_chats.find_one({"thread_id": thread_id})
         
@@ -62,7 +62,7 @@ async def get_chat_history(thread_id: str,
         return chat_history["messages"]
     
     except Exception as e:
-        logger.error(f"Error retrieving chat history: {str(e)}")
+        #logger.error(f"Error retrieving chat history: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve chat history",
@@ -79,8 +79,8 @@ async def process_message(
     """
     Process a message from an admin to their assistant
     """
-    logger.info(f"POST /message - Processing admin message. Message data: {message}")
-    logger.info("Received request to process message")
+    #logger.info(f"POST /message - Processing admin message. Message data: {message}")
+    #logger.info("Received request to process message")
     try:
         content = message.get("content")
         if not content:
@@ -90,10 +90,10 @@ async def process_message(
                 detail="Message content is required",
             )
 
-        logger.info(f"Processing message: {content}")
-        logger.info(
-            f"Admin ID: {current_admin.id}, Thread ID: {current_admin.thread_id}, Assistant ID: {current_admin.assistant_id}"
-        )
+        logger.info(f"CMP: Admin message entry - Admin: {current_admin.id}, Content: {content[:100]}...")  # ADD THIS
+        #logger.info(f"CMP: Processing message: {content}")
+        #logger.info(
+         #   f"CMP: Admin ID: {current_admin.id}, Thread ID: {current_admin.thread_id}, Assistant ID: {current_admin.assistant_id}"
 
         # ADD THIS:
         # Admin context instructions
@@ -116,15 +116,16 @@ async def process_message(
             assistant_id=current_admin.assistant_id,
             # Lambda function - compact way to define a function without naming it.
             run_handler = lambda tool_calls: handle_tool_calls( # defined but NOT executed unless called, this is not like depends(), we're passing the function itself 
-                tool_calls, current_admin, campaign_service, current_admin.thread_id
+                tool_calls, current_admin, campaign_service, current_admin.thread_id,
+                additional_instructions=admin_additional_instructions
             ),
         )
 
-        logger.info(f"Received response: {response}")
+        #logger.info(f"Received response: {response}")
         return {"response": response}
 
     except Exception as e:
-        logger.error(f"Error processing message: {str(e)}")
+        #logger.error(f"Error processing message: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
@@ -138,7 +139,7 @@ async def create_thread(
     """
     Create a new chat thread for the current admin(when new threads on miscio admin dashboard are created)
     """
-    logger.info(f"POST /threads - Creating new thread for admin {current_admin.id}")
+    #logger.info(f"POST /threads - Creating new thread for admin {current_admin.id}")
     try:
         # Create OpenAI thread
         thread_data = await openai_service.create_thread()
@@ -158,7 +159,7 @@ async def create_thread(
         return thread
     
     except Exception as e:
-        logger.error(f"Error creating thread: {str(e)}")
+        #logger.error(f"Error creating thread: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -169,7 +170,7 @@ async def get_threads(current_admin: Admin = Depends(get_current_admin_user)):
     which would be used to populate the chat screen in an admin dashboard
     Note: Does not contain the messages, only the thread metadata
     """
-    logger.info(f"GET /threads - Retrieving all threads for admin {current_admin.id}")
+    #logger.info(f"GET /threads - Retrieving all threads for admin {current_admin.id}")
     try:
         cursor = db.db.threads.find({"admin_id": str(current_admin.id)})
         threads = await cursor.to_list(length=None) # retrieves all matching documents as a list
@@ -194,7 +195,7 @@ async def get_threads(current_admin: Admin = Depends(get_current_admin_user)):
         return formatted_threads
     
     except Exception as e:
-        logger.error(f"Error fetching threads: {str(e)}")
+        #logger.error(f"Error fetching threads: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -207,7 +208,7 @@ async def get_thread_messages(
     Retrieves all messages for a specific thread, 
     which would be used to populate a single chat conversation in the admin dashboard
     """
-    logger.info(f"GET /threads/{thread_id}/messages - Retrieving messages for thread")
+    #logger.info(f"GET /threads/{thread_id}/messages - Retrieving messages for thread")
     try:
         chat_history = await db.db.chat_histories.find_one(
             {"thread_id": thread_id, "admin_id": str(current_admin.id)}
@@ -223,7 +224,7 @@ async def get_thread_messages(
         return [] # Return an empty list if no chat history is found
 
     except Exception as e:
-        logger.error(f"Error fetching messages: {str(e)}")
+        #logger.error(f"Error fetching messages: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -235,9 +236,11 @@ async def create_message(
     openai_service: OpenAIService = Depends(get_openai_service),
     campaign_service: CampaignService = Depends(get_campaign_service),
 ):
-    logger.info(f"POST /threads/{thread_id}/messages - Creating new message in thread")
+    #logger.info(f"POST /threads/{thread_id}/messages - Creating new message in thread")
     try:
         content = message.get("content", "")
+        logger.info(f"CMP: Thread message entry - Admin: {current_admin.id}, Thread: {thread_id}, Content: {content[:100]}...")  # ADD THIS
+
         
         # Generate loading messages immediately (for testing - just log them)
         # try:
@@ -297,7 +300,7 @@ async def create_message(
         return {"messages": messages}
 
     except Exception as e:
-        logger.error(f"Error processing message: {str(e)}")
+        #logger.error(f"Error processing message: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
@@ -309,7 +312,7 @@ async def update_thread_title(
     current_admin: Admin = Depends(get_current_admin_user)
 ):
     """Update the title of a thread."""
-    logger.info(f"PUT /threads/{thread_id}/title - Updating title")
+    #logger.info(f"PUT /threads/{thread_id}/title - Updating title")
     try:
         title = title_data.get("title")
         if not title:
@@ -332,7 +335,7 @@ async def update_thread_title(
         return {"success": True, "title": title}
     
     except Exception as e:
-        logger.error(f"Error updating thread title: {str(e)}")
+        #logger.error(f"Error updating thread title: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
@@ -347,7 +350,7 @@ async def generate_loading_messages_endpoint(
     """
     Generate contextual loading messages for a user prompt - frontend endpoint
     """
-    logger.info(f"POST /loading-messages - Generating loading messages")
+    #logger.info(f"POST /loading-messages - Generating loading messages")
     try:
         content = message.get("content")
         if not content:
@@ -385,6 +388,8 @@ async def handle_tool_calls(
     Processes function calls requested by the OpenAI assistant and returns the results.
     Updated to handle the new draft-approval workflow.
     """
+
+    logger.info(f"CMP: Processing {len(tool_calls)} tool calls for admin {current_admin.id}")  # ADD THIS
     
     tool_outputs = []
     for tool_call in tool_calls:
@@ -392,12 +397,14 @@ async def handle_tool_calls(
             function_name = tool_call["function"]["name"]
             arguments = json.loads(tool_call["function"]["arguments"])
             logger.info(
-                f"Handling function call: {function_name} with arguments: {arguments}"
+                f"CMP: Handling function call: {function_name} with arguments: {arguments}"
             )
 
             if function_name == "create_messaging_draft":
                 # Create draft campaign using new workflow
                 try:
+                    logger.info(f"CMP: Creating messaging draft - Purpose: {arguments.get('campaign_purpose', '')[:50]}...")  # ADD THIS
+
                     # Create CampaignDraftRequest from arguments
                     draft_request = CampaignDraftRequest(
                         campaign_purpose=arguments.get("campaign_purpose", ""),
@@ -460,6 +467,8 @@ The draft has been saved and is ready for your review."""
             elif function_name == "create_feedback_draft":
                 # Create feedback campaign draft using new workflow
                 try:
+                    logger.info(f"CMP: Creating feedback draft - Topic: {arguments.get('research_topic', '')[:50]}...")  # ADD THIS
+
                     # Import feedback schema
                     from app.schemas.feedback import FeedbackDraftRequest
                     
@@ -560,6 +569,8 @@ The draft has been saved and is ready for your review."""
             elif function_name == "execute_campaign":
                 # Execute approved campaign
                 try:
+                    logger.info(f"CMP: Executing campaign {arguments.get('campaign_id', '')}")  # ADD THIS
+        
                     campaign_id = arguments.get("campaign_id", "")
                     confirmation = arguments.get("confirmation", "")
                     

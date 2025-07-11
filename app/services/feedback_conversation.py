@@ -24,6 +24,8 @@ class FeedbackConversationService:
     ) -> FeedbackConversationState:
         """Initialize conversation state for a student starting a feedback campaign"""
         try:
+            logger.info(f"CMP: Feedback conversation init - Student: {student_id}, Campaign: {campaign_id}")  # ADD THIS
+
             # Get campaign questions
             campaign = await self.db.campaigns.find_one({"_id": ObjectId(campaign_id)})
             if not campaign or campaign.get("type") != "feedback":
@@ -276,6 +278,8 @@ Guidelines:
     ) -> str:
         """Generate context-aware prompt for the assistant based on conversation state"""
         try:
+            logger.info(f"CMP: Generating feedback prompt - Student: {student_name}, Progress: {conversation_state.questions_completed}/{conversation_state.total_questions}")  # ADD THIS
+
             # Get campaign context
             campaign = await self.db.campaigns.find_one({"_id": ObjectId(conversation_state.campaign_id)})
             research_topic = campaign.get("feedback_metadata", {}).get("research_topic", "feedback")

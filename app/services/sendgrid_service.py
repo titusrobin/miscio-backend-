@@ -23,6 +23,8 @@ class SendGridService:
         
         """
         try:
+            logger.info(f"CMP: Email send - To: {to_email}, Type: {message_type}, Subject: {subject[:50]}...")  # ADD THIS
+
             # Only use Re: prefix for replies to student messages, not for new campaigns
             if subject.strip() == "":
                 subject = "Message from Miscio Assistant"
