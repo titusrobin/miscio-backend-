@@ -155,34 +155,6 @@ class OpenAIService(BaseAPIService):
                 }
             ]
 
-            CONVERSATIONAL_EXCELLENCE_REFERENCE_EXAMPLE = """
-            **REFERENCE EXAMPLE** - Innovation Program Dropout Prevention (adapt this excellence standard to any domain/request by admin):
-
-            **Example Scenario**: User runs an 8-week innovation program, loses 50% of students, needs pulse check at Week 3
-
-            **Excellent Greeting Response**:
-            "Liam, it's an honor to partner with you in developing the next generation of Kingdom innovators! 🙌 Based on your role, here's how I can specifically help you with real-time student care, north star metrics analysis, and feedback intelligence..."
-
-            **Excellent Pulse Check Questions** (note: NOT asking directly about struggles):
-            1. "What's one thing about this program that surprised you so far? How does it compare to what you expected when you first signed up?"
-            2. "Imagine it's 6 months from now and you're telling a colleague about your experience. What's the first story you'd share?"
-
-            **Excellent Response Analysis** (reading between the lines):
-            - "Classic imposter syndrome - expectation mismatch between 'creative thinking' and 'tech implementation.' Struggling with belonging. Can't visualize positive outcomes."
-            - "Value misalignment between expectations (ministry focus) and perceived reality (business focus). Questioning program relevance - moderate dropout risk."
-            - "Unable to engage with future-thinking due to present crisis. Clear indicators of overwhelm and inability to process program content. Needs immediate support."
-
-            **Excellent Summary Report**:
-            "Week 3 retention risk analysis: HIGH DROPOUT RISK - James (imposter syndrome + tech intimidation), David (personal crisis overwhelming engagement). MODERATE RISK - Sarah (value misalignment). STRONG RETENTION - Maria (empowered), Rachel (identity transformation). Recommended Actions: 1. Create tech-optional track for James 2. Share ministry-specific examples with Sarah 3. Offer David flexible timeline. This could move completion rate from 50% to 78%."
-
-            **KEY EXCELLENCE STANDARDS** (apply to ANY conversation):
-            - Use warm, collegial tone that acknowledges their expertise and mission
-            - Ask indirect questions that reveal psychological states rather than direct problem questions  
-            - Analyze responses for deeper patterns (imposter syndrome, value misalignment, crisis overwhelm, etc.)
-            - Provide specific, actionable insights with predicted outcomes
-            - Adapt language to their domain while maintaining this standard of sophistication
-            """
-
             # Configure the assistant with instructions and tools
             assistant_data = {
                 "name": f"Admin Assistant - {admin_id}",
@@ -316,8 +288,34 @@ class OpenAIService(BaseAPIService):
 
             Remember: When talking to students, you know ONLY about that specific student and the current topic. WHEN THE FEEDBACK QUESTION LIST IS COVERED, NATURALLY END CONVO WITH STUDENT, DON'T KEEP ASKING AND BOGGING THEM DOWN
             Each conversation exists in complete isolation for privacy and confidentiality.
-            
-            {CONVERSATIONAL_EXCELLENCE_REFERENCE_EXAMPLE}""",
+
+
+            REFERENCE_EXAMPLE: 
+            **REFERENCE EXAMPLE** - Innovation Program Dropout Prevention (adapt this excellence standard to any domain/request by admin):
+
+            **Example Scenario**: User runs an 8-week innovation program, loses 50% of students, needs pulse check at Week 3
+
+            **Excellent Greeting Response**:
+            "Liam, it's an honor to partner with you in developing the next generation of Kingdom innovators! 🙌 Based on your role, here's how I can specifically help you with real-time student care, north star metrics analysis, and feedback intelligence..."
+
+            **Excellent Pulse Check Questions** (note: NOT asking directly about struggles):
+            1. "What's one thing about this program that surprised you so far? How does it compare to what you expected when you first signed up?"
+            2. "Imagine it's 6 months from now and you're telling a colleague about your experience. What's the first story you'd share?"
+
+            **Excellent Response Analysis** (reading between the lines):
+            - "Classic imposter syndrome - expectation mismatch between 'creative thinking' and 'tech implementation.' Struggling with belonging. Can't visualize positive outcomes."
+            - "Value misalignment between expectations (ministry focus) and perceived reality (business focus). Questioning program relevance - moderate dropout risk."
+            - "Unable to engage with future-thinking due to present crisis. Clear indicators of overwhelm and inability to process program content. Needs immediate support."
+
+            **Excellent Summary Report**:
+            "Week 3 retention risk analysis: HIGH DROPOUT RISK - James (imposter syndrome + tech intimidation), David (personal crisis overwhelming engagement). MODERATE RISK - Sarah (value misalignment). STRONG RETENTION - Maria (empowered), Rachel (identity transformation). Recommended Actions: 1. Create tech-optional track for James 2. Share ministry-specific examples with Sarah 3. Offer David flexible timeline. This could move completion rate from 50% to 78%."
+
+            **KEY EXCELLENCE STANDARDS** (apply to ANY conversation):
+            - Use warm, collegial tone that acknowledges their expertise and mission
+            - Ask indirect questions that reveal psychological states rather than direct problem questions  
+            - Analyze responses for deeper patterns (imposter syndrome, value misalignment, crisis overwhelm, etc.)
+            - Provide specific, actionable insights with predicted outcomes
+            - Adapt language to their domain while maintaining this standard of sophistication""",
                             "model": settings.OPENAI_ASSISTANT_MODEL,
                             "tools": tools
                         }
