@@ -46,8 +46,8 @@ class Settings(BaseSettings):
     TWILIO_WHATSAPP_NUMBER: str = "whatsapp:+14155238886"
 
     SENDGRID_API_KEY: str
-    SENDGRID_FROM_EMAIL: str = "robin@miscio.io"
-    SENDGRID_FROM_NAME: str = "Miscio Assistant"
+    SENDGRID_FROM_EMAIL: str = "robin@em1650.miscioapp.com."
+    SENDGRID_FROM_NAME: str = "Robin Titus(Miscio)"
 
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", 
                                   "https://api.miscioapp.com", 
