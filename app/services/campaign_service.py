@@ -44,149 +44,6 @@ class CampaignService:
         self.sendgrid_service = sendgrid_service
         self.db = database
 
-    # KEEP EXISTING METHODS FOR BACKWARD COMPATIBILITY
-    async def create_campaign(self, campaign: dict, admin_id: str, thread_id: str = None) -> Dict:
-        """
-        LEGACY METHOD - Creates a campaign using the old workflow
-        Maintained for backward compatibility
-        """
-        logger.info(f"CMP: Creating legacy campaign: {campaign} in thread: {thread_id}")
-        try:
-            async with await self.db.client.start_session() as session:
-                async with session.start_transaction():
-                    # Use old campaign structure but with new status
-                    campaign_data = {
-                        "type": CampaignType.MESSAGING.value,
-                        "status": CampaignStatus.COMPLETED.value,  # Legacy campaigns execute immediately
-                        "description": campaign.get("details", ""),
-                        "purpose": campaign.get("purpose", ""),
-                        "audience": campaign.get("audience", "all students"),
-                        "tone": campaign.get("tone", "friendly and helpful"),
-                        "key_points": campaign.get("key_points", ""),
-                        "call_to_action": campaign.get("call_to_action", ""),
-                        "admin_id": admin_id,
-                        "thread_id": thread_id,
-                        "created_at": datetime.utcnow(),
-                        "executed_at": datetime.utcnow(),
-                        "completed_at": datetime.utcnow(),
-                        # Keep old status for compatibility
-                        "legacy_status": "active"
-                    }
-                    
-                    # Deactivate existing legacy campaigns
-                    await self.db.campaigns.update_many(
-                        {"legacy_status": "active", "admin_id": admin_id},
-                        {"$set": {"legacy_status": "inactive"}},
-                        session=session,
-                    )
-
-                    # Insert the campaign
-                    result = await self.db.campaigns.insert_one(campaign_data, session=session)
-                    campaign_data["id"] = str(result.inserted_id)
-                    
-                    # Get admin data
-                    admin_data = await self._get_admin_data(admin_id, session)
-                    assistant_id = admin_data.get("assistant_id") if admin_data else None
-
-                    if assistant_id:
-                        # Update with assistant_id
-                        await self.db.campaigns.update_one(
-                            {"_id": result.inserted_id},
-                            {"$set": {"assistant_id": assistant_id}},
-                            session=session
-                        )
-                        campaign_data["assistant_id"] = assistant_id
-
-                    # Execute campaign immediately (legacy behavior)
-                    await self._execute_legacy_campaign(campaign_data, campaign, session)
-
-                    return campaign_data
-
-        except Exception as e:
-            logger.error(f"Error creating legacy campaign: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create legacy campaign: {str(e)}",
-            )
-
-    async def _execute_legacy_campaign(self, campaign_data: dict, campaign_context: dict, session):
-        """Execute a legacy campaign immediately"""
-        logger.info(f"CMP: Executing legacy campaign: {campaign_data}")
-        # Get students
-        students = await self.db.students.find(
-            {"admin_id": campaign_data["admin_id"], "status": "active"}, 
-            session=session
-        ).to_list(length=None)
-
-        successful_messages = 0
-        failed_messages = 0
-
-        for student in students:
-            try:
-                # Generate personalized message using legacy context
-                if campaign_data.get("assistant_id"):
-                    initial_message = await self._generate_personalized_message(
-                        campaign=campaign_context,
-                        student=student,
-                        assistant_id=campaign_data["assistant_id"],
-                        admin_id=campaign_data["admin_id"]
-                    )
-                else:
-                    student_name = student.get('first_name', 'Student')
-                    initial_message = f"Hi {student_name}, \n\n{campaign_context.get('key_points', '')} {campaign_context.get('call_to_action', 'let us know if you have questions')}"
-                
-                # Send message
-                if student.get('email') and student.get('preferred_contact_method') == 'email': 
-                    await self.sendgrid_service.send_message(
-                        to_email=student["email"],
-                        subject=campaign_context.get("title", "Message from Miscio Assistant"),
-                        message=initial_message,
-                        message_type="initial"
-                    )
-                    contact_method = "email"
-                elif student.get('phone'):
-                    await self.twilio_service.send_message(
-                        student["phone"], initial_message
-                    )
-                    contact_method = "whatsapp"
-                else:
-                    logger.warning(f"No valid contact method for student {student['_id']}")
-                    failed_messages += 1
-                    continue
-                
-                # Record interaction with proper ObjectId handling
-                await self._record_student_interaction( 
-                    campaign_id=str(campaign_data["id"]),
-                    student_id=str(student["_id"]),
-                    message=initial_message,
-                    contact_method=contact_method,
-                    email_subject=campaign_context.get("title", "Message from Miscio Assistant") if contact_method == "email" else None,
-                    assistant_id=campaign_data.get("assistant_id"),
-                    session=session,
-                    admin_id=campaign_data["admin_id"]
-                )
-                
-                successful_messages += 1
-                
-            except Exception as e:
-                logger.error(f"Error processing student {student['_id']}: {str(e)}")
-                failed_messages += 1
-
-        # Update with execution summary
-        execution_summary = {
-            "total_students": len(students),
-            "successful_messages": successful_messages,
-            "failed_messages": failed_messages
-        }
-
-        await self.db.campaigns.update_one(
-            {"_id": safe_object_id(campaign_data["id"])},
-            {"$set": {"execution_summary": execution_summary}},
-            session=session
-        )
-
-        campaign_data["summary"] = execution_summary
-
     # NEW DRAFT-APPROVAL WORKFLOW METHODS
     async def create_messaging_draft(
         self, 
@@ -195,14 +52,12 @@ class CampaignService:
         thread_id: str = None
     ) -> Dict:
         """Create a draft messaging campaign that requires admin approval"""
-        logger.info(f"CMP: Draft creation start - Admin: {admin_id}, Purpose: {draft_request.campaign_purpose[:50]}...")  # ADD THIS
-        # logger.info(f"Creating messaging campaign draft: {draft_request.campaign_purpose}")
         
         try:
             # Generate sample message
             sample_message = await self._generate_sample_message(draft_request, admin_id)
             
-            # Create draft content
+            # Create draft content #TODO: What if trigger two drafts recurringly 
             draft_content = DraftContent(
                 message=sample_message,
                 subject=self._generate_subject(draft_request),
@@ -245,6 +100,71 @@ class CampaignService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to create messaging draft: {str(e)}"
             )
+
+    async def create_feedback_draft(
+    self, 
+    draft_request: FeedbackDraftRequest, 
+    admin_id: str, 
+    thread_id: str = None
+) -> Dict:
+        """Create a draft feedback campaign with research questions that requires admin approval"""
+        
+        try:
+            # Generate or process questions
+            if draft_request.admin_provided_questions:
+                # Admin provided questions - format them
+                questions = await self._process_admin_questions(
+                    draft_request.admin_provided_questions,
+                    draft_request.conversation_style
+                )
+                question_source = "admin_provided"
+            else:
+                # Generate questions using AI
+                questions = await self._generate_research_questions(
+                    draft_request, 
+                    admin_id
+                )
+                question_source = "ai_generated"
+            
+            # Create campaign data
+            campaign_data = {
+                "type": CampaignType.FEEDBACK.value,
+                "status": CampaignStatus.DRAFT.value,
+                "description": draft_request.research_topic,
+                "admin_id": admin_id,
+                "thread_id": thread_id,
+                "questions": [q.dict() for q in questions],
+                "feedback_metadata": {
+                    "research_topic": draft_request.research_topic,
+                    "conversation_style": draft_request.conversation_style,
+                    "target_audience": draft_request.target_audience,
+                    "question_source": question_source,
+                    "total_questions": len(questions)
+                },
+                "approval_history": [{
+                    "action": "created_draft",
+                    "timestamp": datetime.utcnow(),
+                    "admin_id": admin_id,
+                    "notes": f"Feedback draft created for: {draft_request.campaign_purpose}"
+                }],
+                "created_at": datetime.utcnow()
+            }
+            
+            # Store in database
+            result = await self.db.campaigns.insert_one(campaign_data)
+            campaign_data["id"] = str(result.inserted_id)
+            
+            logger.info(f"Created feedback draft campaign with ID: {campaign_data['id']}")
+            return campaign_data
+            
+        except Exception as e:
+            logger.error(f"Error creating feedback draft: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create feedback draft: {str(e)}"
+            )
+
+
 
     async def approve_and_execute_campaign(
         self,
@@ -433,20 +353,55 @@ class CampaignService:
         return message
 
     def _generate_subject(self, draft_request: CampaignDraftRequest) -> str:
-        """Generate an email subject line based on campaign purpose"""
-        purpose = draft_request.campaign_purpose.strip()
-        
-        # Simple subject generation logic
-        if "deadline" in purpose.lower() or "reminder" in purpose.lower():
-            return f"Reminder: {purpose}"
-        elif "new" in purpose.lower() or "announcement" in purpose.lower():
-            return f"Update: {purpose}"
-        elif "important" in purpose.lower():
-            return f"Important: {purpose}"
-        else:
-            # Capitalize first letter and ensure it's not too long
-            subject = purpose[0].upper() + purpose[1:] if purpose else "Message from Your School"
-            return subject[:50] + "..." if len(subject) > 50 else subject
+        """Generate an AI-powered email subject line for messaging campaigns"""
+        try:
+            # Use OpenAI to generate a contextual subject line
+            prompt = f"""Create an engaging email subject line for a school messaging campaign.
+
+    Campaign Purpose: {draft_request.campaign_purpose}
+    Campaign Details: {draft_request.campaign_details}
+    Tone: {draft_request.tone_and_style}
+    Target Audience: {draft_request.target_audience}
+
+    Requirements:
+    - Keep it under 50 characters
+    - Make it clear and actionable
+    - Match the specified tone ({draft_request.tone_and_style})
+    - Make students want to open and read
+    - Be specific enough to convey importance
+
+    Return only the subject line, no quotes or extra text."""
+
+            headers = {
+                "Authorization": f"Bearer {self.openai_service.headers['Authorization'].split(' ')[1]}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "model": "gpt-4-turbo-preview",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 100,
+                "temperature": 0.7
+            }
+            
+            response = self.openai_service.make_request(
+                method="POST",
+                url="https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                data=data
+            )
+            
+            if response and "choices" in response and len(response["choices"]) > 0:
+                subject = response["choices"][0]["message"]["content"].strip()
+                subject = subject.strip('"').strip("'")
+                logger.info(f"Generated messaging subject: {subject}")
+                return subject
+            else:
+                return self._generate_fallback_subject(draft_request)
+                
+        except Exception as e:
+            logger.error(f"Error generating messaging subject: {str(e)}")
+            return self._generate_fallback_subject(draft_request)
 
     async def _cancel_campaign(self, campaign: dict, approval_request: CampaignApprovalRequest, admin_id: str) -> Dict:
         """Cancel a draft campaign"""
@@ -1085,70 +1040,6 @@ class CampaignService:
         # Return minimal valid outputs to satisfy the API
         return [{"tool_call_id": call["id"], "output": "{}"} for call in tool_calls]
 
-    async def create_feedback_draft(
-    self, 
-    draft_request: FeedbackDraftRequest, 
-    admin_id: str, 
-    thread_id: str = None
-) -> Dict:
-        """Create a draft feedback campaign with research questions that requires admin approval"""
-        #logger.info(f"Creating feedback campaign draft: {draft_request.campaign_purpose}")
-        logger.info(f"CMP: Feedback draft start - Admin: {admin_id}, Topic: {draft_request.research_topic[:50]}...")  # ADD THIS
-
-        try:
-            # Generate or process questions
-            if draft_request.admin_provided_questions:
-                # Admin provided questions - format them
-                questions = await self._process_admin_questions(
-                    draft_request.admin_provided_questions,
-                    draft_request.conversation_style
-                )
-                question_source = "admin_provided"
-            else:
-                # Generate questions using AI
-                questions = await self._generate_research_questions(
-                    draft_request, 
-                    admin_id
-                )
-                question_source = "ai_generated"
-            
-            # Create campaign data
-            campaign_data = {
-                "type": CampaignType.FEEDBACK.value,
-                "status": CampaignStatus.DRAFT.value,
-                "description": draft_request.research_topic,
-                "admin_id": admin_id,
-                "thread_id": thread_id,
-                "questions": [q.dict() for q in questions],
-                "feedback_metadata": {
-                    "research_topic": draft_request.research_topic,
-                    "conversation_style": draft_request.conversation_style,
-                    "target_audience": draft_request.target_audience,
-                    "question_source": question_source,
-                    "total_questions": len(questions)
-                },
-                "approval_history": [{
-                    "action": "created_draft",
-                    "timestamp": datetime.utcnow(),
-                    "admin_id": admin_id,
-                    "notes": f"Feedback draft created for: {draft_request.campaign_purpose}"
-                }],
-                "created_at": datetime.utcnow()
-            }
-            
-            # Store in database
-            result = await self.db.campaigns.insert_one(campaign_data)
-            campaign_data["id"] = str(result.inserted_id)
-            
-            logger.info(f"Created feedback draft campaign with ID: {campaign_data['id']}")
-            return campaign_data
-            
-        except Exception as e:
-            logger.error(f"Error creating feedback draft: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create feedback draft: {str(e)}"
-            )
 
     async def _process_admin_questions(
         self, 
@@ -1414,3 +1305,148 @@ class CampaignService:
         except Exception as e:
             logger.error(f"Error generating feedback initial message: {str(e)}")
             return self._generate_fallback_feedback_message(campaign_purpose, research_topic, conversation_style)
+
+
+    #####PREV#######
+    async def _execute_legacy_campaign(self, campaign_data: dict, campaign_context: dict, session):
+        """Execute a legacy campaign immediately"""
+        logger.info(f"CMP: Executing legacy campaign: {campaign_data}")
+        # Get students
+        students = await self.db.students.find(
+            {"admin_id": campaign_data["admin_id"], "status": "active"}, 
+            session=session
+        ).to_list(length=None)
+
+        successful_messages = 0
+        failed_messages = 0
+
+        for student in students:
+            try:
+                # Generate personalized message using legacy context
+                if campaign_data.get("assistant_id"):
+                    initial_message = await self._generate_personalized_message(
+                        campaign=campaign_context,
+                        student=student,
+                        assistant_id=campaign_data["assistant_id"],
+                        admin_id=campaign_data["admin_id"]
+                    )
+                else:
+                    student_name = student.get('first_name', 'Student')
+                    initial_message = f"Hi {student_name}, \n\n{campaign_context.get('key_points', '')} {campaign_context.get('call_to_action', 'let us know if you have questions')}"
+                
+                # Send message
+                if student.get('email') and student.get('preferred_contact_method') == 'email': 
+                    await self.sendgrid_service.send_message(
+                        to_email=student["email"],
+                        subject=campaign_context.get("title", "Message from Miscio Assistant"),
+                        message=initial_message,
+                        message_type="initial"
+                    )
+                    contact_method = "email"
+                elif student.get('phone'):
+                    await self.twilio_service.send_message(
+                        student["phone"], initial_message
+                    )
+                    contact_method = "whatsapp"
+                else:
+                    logger.warning(f"No valid contact method for student {student['_id']}")
+                    failed_messages += 1
+                    continue
+                
+                # Record interaction with proper ObjectId handling
+                await self._record_student_interaction( 
+                    campaign_id=str(campaign_data["id"]),
+                    student_id=str(student["_id"]),
+                    message=initial_message,
+                    contact_method=contact_method,
+                    email_subject=campaign_context.get("title", "Message from Miscio Assistant") if contact_method == "email" else None,
+                    assistant_id=campaign_data.get("assistant_id"),
+                    session=session,
+                    admin_id=campaign_data["admin_id"]
+                )
+                
+                successful_messages += 1
+                
+            except Exception as e:
+                logger.error(f"Error processing student {student['_id']}: {str(e)}")
+                failed_messages += 1
+
+        # Update with execution summary
+        execution_summary = {
+            "total_students": len(students),
+            "successful_messages": successful_messages,
+            "failed_messages": failed_messages
+        }
+
+        await self.db.campaigns.update_one(
+            {"_id": safe_object_id(campaign_data["id"])},
+            {"$set": {"execution_summary": execution_summary}},
+            session=session
+        )
+
+        campaign_data["summary"] = execution_summary
+
+    # KEEP EXISTING METHODS FOR BACKWARD COMPATIBILITY
+    async def create_campaign(self, campaign: dict, admin_id: str, thread_id: str = None) -> Dict:
+        """
+        LEGACY METHOD - Creates a campaign using the old workflow
+        Maintained for backward compatibility
+        """
+        logger.info(f"CMP: Creating legacy campaign: {campaign} in thread: {thread_id}")
+        try:
+            async with await self.db.client.start_session() as session:
+                async with session.start_transaction():
+                    # Use old campaign structure but with new status
+                    campaign_data = {
+                        "type": CampaignType.MESSAGING.value,
+                        "status": CampaignStatus.COMPLETED.value,  # Legacy campaigns execute immediately
+                        "description": campaign.get("details", ""),
+                        "purpose": campaign.get("purpose", ""),
+                        "audience": campaign.get("audience", "all students"),
+                        "tone": campaign.get("tone", "friendly and helpful"),
+                        "key_points": campaign.get("key_points", ""),
+                        "call_to_action": campaign.get("call_to_action", ""),
+                        "admin_id": admin_id,
+                        "thread_id": thread_id,
+                        "created_at": datetime.utcnow(),
+                        "executed_at": datetime.utcnow(),
+                        "completed_at": datetime.utcnow(),
+                        # Keep old status for compatibility
+                        "legacy_status": "active"
+                    }
+                    
+                    # Deactivate existing legacy campaigns
+                    await self.db.campaigns.update_many(
+                        {"legacy_status": "active", "admin_id": admin_id},
+                        {"$set": {"legacy_status": "inactive"}},
+                        session=session,
+                    )
+
+                    # Insert the campaign
+                    result = await self.db.campaigns.insert_one(campaign_data, session=session)
+                    campaign_data["id"] = str(result.inserted_id)
+                    
+                    # Get admin data
+                    admin_data = await self._get_admin_data(admin_id, session)
+                    assistant_id = admin_data.get("assistant_id") if admin_data else None
+
+                    if assistant_id:
+                        # Update with assistant_id
+                        await self.db.campaigns.update_one(
+                            {"_id": result.inserted_id},
+                            {"$set": {"assistant_id": assistant_id}},
+                            session=session
+                        )
+                        campaign_data["assistant_id"] = assistant_id
+
+                    # Execute campaign immediately (legacy behavior)
+                    await self._execute_legacy_campaign(campaign_data, campaign, session)
+
+                    return campaign_data
+
+        except Exception as e:
+            logger.error(f"Error creating legacy campaign: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create legacy campaign: {str(e)}",
+            )

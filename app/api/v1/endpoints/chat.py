@@ -5,6 +5,7 @@ from typing import Dict, List
 from datetime import datetime
 from app.db.mongodb import db
 from app.models.admin import Admin
+from app.schemas.feedback import FeedbackDraftRequest
 from app.core.security import get_current_admin_user
 from app.services.openai_service import OpenAIService
 from app.services.campaign_service import CampaignService
@@ -79,39 +80,31 @@ async def process_message(
     """
     Process a message from an admin to their assistant
     """
-    #logger.info(f"POST /message - Processing admin message. Message data: {message}")
-    #logger.info("Received request to process message")
+    logger.info(f"e2e: Processing admin message. Message data: {message}")
     try:
         content = message.get("content")
         if not content:
-            logger.error("Message content is missing")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Message content is required",
             )
 
-        logger.info(f"CMP: Admin message entry - Admin: {current_admin.id}, Content: {content[:100]}...")  # ADD THIS
-        #logger.info(f"CMP: Processing message: {content}")
-        #logger.info(
-         #   f"CMP: Admin ID: {current_admin.id}, Thread ID: {current_admin.thread_id}, Assistant ID: {current_admin.assistant_id}"
-
-        # ADD THIS:
+        logger.info(f"e2e: Admin message entry - Admin: {current_admin.id}, Content: {content[:100]}...")  
+        
         # Admin context instructions
-        admin_additional_instructions = "ADMIN MODE: Full administrative capabilities active."
+        admin_additional_instructions = "ADMIN MODE: Full administrative capabilities active." ##TODO: Does this do anything? 
 
-
-        # Generate loading messages immediately (for testing - just log them)
+        # Loading messages 
         # try:
-        #     loading_messages = await openai_service.generate_loading_messages(content)
-        #     logger.info(f"Generated loading messages: {loading_messages}")
+        #     loading_messages = await openai_service.generate_loading_messages(content) ## TODO: What if we outsourced this to a free model
         # except Exception as e:
         #     logger.error(f"Failed to generate loading messages: {str(e)}")
         #     loading_messages = openai_service._get_fallback_messages()
         #     logger.info(f"Using fallback messages: {loading_messages}")
 
-        # Process the message with function calling support
+        # Model api call 
         response = await openai_service.process_message(
-            thread_id=current_admin.thread_id,
+            thread_id=current_admin.thread_id, ##TODO: Is this the updated thread_id? 
             message=content,
             assistant_id=current_admin.assistant_id,
             # Lambda function - compact way to define a function without naming it.
@@ -121,11 +114,10 @@ async def process_message(
             ),
         )
 
-        #logger.info(f"Received response: {response}")
+        #logger.info(f"e2e: Received response: {response}")
         return {"response": response}
 
     except Exception as e:
-        #logger.error(f"Error processing message: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
@@ -388,31 +380,26 @@ async def handle_tool_calls(
     Processes function calls requested by the OpenAI assistant and returns the results.
     Updated to handle the new draft-approval workflow.
     """
-
-    logger.info(f"CMP: Processing {len(tool_calls)} tool calls for admin {current_admin.id}")  # ADD THIS
     
     tool_outputs = []
     for tool_call in tool_calls:
         try:
             function_name = tool_call["function"]["name"]
             arguments = json.loads(tool_call["function"]["arguments"])
-            logger.info(
-                f"CMP: Handling function call: {function_name} with arguments: {arguments}"
-            )
 
             if function_name == "create_messaging_draft":
                 # Create draft campaign using new workflow
                 try:
-                    logger.info(f"CMP: Creating messaging draft - Purpose: {arguments.get('campaign_purpose', '')[:50]}...")  # ADD THIS
+                    logger.info(f"e2e: Creating messaging draft - Purpose: {arguments.get('campaign_purpose', '')[:50]}...") 
 
                     # Create CampaignDraftRequest from arguments
                     draft_request = CampaignDraftRequest(
                         campaign_purpose=arguments.get("campaign_purpose", ""),
                         campaign_details=arguments.get("campaign_details", ""),
                         target_audience=arguments.get("target_audience", "all students"),
-                        tone_and_style=arguments.get("tone_and_style", "friendly and helpful"),
+                        tone_and_style=arguments.get("tone_and_style", "friendly and helpful"), #TODO: needed? 
                         key_points=arguments.get("key_points", ""),
-                        call_to_action=arguments.get("call_to_action", "respond with any questions"),
+                        call_to_action=arguments.get("call_to_action", "respond with any questions"), #TODO: needed? 
                         thread_id=thread_id
                     )
                     
@@ -430,10 +417,10 @@ async def handle_tool_calls(
                     # Format response for the assistant
                     response_message = f"""Draft created successfully! Here's the message I generated:
 
-{draft_message}
+                    {draft_message}
 
-The draft has been saved and is ready for your review."""
-                    
+                    The draft has been saved and is ready for your review."""
+                                        
                     tool_outputs.append(
                         {
                             "tool_call_id": tool_call["id"],
@@ -467,10 +454,7 @@ The draft has been saved and is ready for your review."""
             elif function_name == "create_feedback_draft":
                 # Create feedback campaign draft using new workflow
                 try:
-                    logger.info(f"CMP: Creating feedback draft - Topic: {arguments.get('research_topic', '')[:50]}...")  # ADD THIS
-
-                    # Import feedback schema
-                    from app.schemas.feedback import FeedbackDraftRequest
+                    logger.info(f"e2e: Creating feedback draft - Topic: {arguments.get('research_topic', '')[:50]}...")  # ADD THIS
                     
                     # Create FeedbackDraftRequest from arguments
                     draft_request = FeedbackDraftRequest(
@@ -498,17 +482,17 @@ The draft has been saved and is ready for your review."""
                         question_list = "\n".join([f"{i+1}. {q['text']}" for i, q in enumerate(questions)])
                         response_message = f"""I'll cover these questions conversationally:
 
-            {question_list}
+                        {question_list}
 
-            Should I add any additional questions, or start the feedback campaign?"""
+                        Should I add any additional questions, or start the feedback campaign?"""
                     else:
                         # AI generated questions - ask for approval
                         question_list = "\n".join([f"{i+1}. {q['text']}" for i, q in enumerate(questions)])
                         response_message = f"""Research questions:
 
-            {question_list}
+                        {question_list}
 
-            Proceed with these questions?"""
+                        Proceed with these questions?"""
                     
                     tool_outputs.append(
                         {
@@ -569,7 +553,7 @@ The draft has been saved and is ready for your review."""
             elif function_name == "execute_campaign":
                 # Execute approved campaign
                 try:
-                    logger.info(f"CMP: Executing campaign {arguments.get('campaign_id', '')}")  # ADD THIS
+                    logger.info(f"e2e: Executing campaign {arguments.get('campaign_id', '')}") 
         
                     campaign_id = arguments.get("campaign_id", "")
                     confirmation = arguments.get("confirmation", "")
