@@ -60,7 +60,7 @@ class CampaignService:
             # Create draft content #TODO: What if trigger two drafts recurringly 
             draft_content = DraftContent(
                 message=sample_message,
-                subject=self._generate_subject(draft_request),
+                subject=await self._generate_subject(draft_request),
                 generation_context={
                     "purpose": draft_request.campaign_purpose,
                     "details": draft_request.campaign_details,
@@ -352,7 +352,7 @@ class CampaignService:
         
         return message
 
-    def _generate_subject(self, draft_request: CampaignDraftRequest) -> str:
+    async def _generate_subject(self, draft_request: CampaignDraftRequest) -> str:
         """Generate an AI-powered email subject line for messaging campaigns"""
         try:
             # Use OpenAI to generate a contextual subject line
