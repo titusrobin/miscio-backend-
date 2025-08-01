@@ -384,7 +384,7 @@ class CampaignService:
                 "temperature": 0.7
             }
             
-            response = self.openai_service.make_request(
+            response = await self.openai_service.make_request(
                 method="POST",
                 url="https://api.openai.com/v1/chat/completions",
                 headers=headers,
