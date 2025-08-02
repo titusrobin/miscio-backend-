@@ -641,6 +641,13 @@ class CampaignService:
                         draft_content = campaign.get("draft_content", {})
                         final_message = approval_request.modified_message or draft_content.get("message")
                         final_subject = approval_request.modified_subject or draft_content.get("subject")
+
+                        # 🔍 DEBUG
+                        logger.info(f"🚨 EXECUTION DEBUG:")
+                        logger.info(f"Campaign ID: {campaign.get('_id')}")
+                        logger.info(f"approval_request.modified_message: {approval_request.modified_message}")
+                        logger.info(f"draft_content.message: {draft_content.get('message', '')[:100]}...")
+                        logger.info(f"FINAL MESSAGE: {final_message[:100]}...")
                         
                         if not final_message:
                             raise Exception("No message content available for execution")
