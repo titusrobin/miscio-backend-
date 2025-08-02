@@ -15,7 +15,7 @@ from app.api.v1.endpoints.feedback import router as feedback_router
 # Output messages with different severity levels and destinations (console, files, etc.)
 # Python logging has several levels (in increasing order of severity): DEBUG, INFO, WARNING, ERROR, CRITICAL
 # The basicConfig() function also has other parameters (not used here): format, filename, filemode, etc.
-logging.basicConfig(level=logging.INFO) 
+logging.basicConfig(level=logging.WARNING) 
 
 # Create logger instance specific to this module(ie file): app.main.py - more granular control over logging by file 
 logger = logging.getLogger(__name__) 

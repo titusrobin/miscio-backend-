@@ -52,7 +52,7 @@ async def get_chat_history(thread_id: str,
     """
     Retrieve chat history for a specific thread.
     """
-    #logger.info(f"GET /history/{thread_id} - Retrieving chat history")
+    logger.warning(f"1.a GET /history/{thread_id} - Retrieving chat history")
     try:
         chat_history = await db.db.admin_chats.find_one({"thread_id": thread_id})
         
@@ -80,7 +80,7 @@ async def process_message(
     """
     Process a message from an admin to their assistant
     """
-    logger.info(f"e2e: Processing admin message. Message data: {message}")
+    logger.warning(f"1.b Processing admin message. Message data: {message}")
     try:
         content = message.get("content")
         if not content:
@@ -89,7 +89,7 @@ async def process_message(
                 detail="Message content is required",
             )
 
-        logger.info(f"e2e: Admin message entry - Admin: {current_admin.id}, Content: {content[:100]}...")  
+        #logger.info(f"e2e: Admin message entry - Admin: {current_admin.id}, Content: {content[:100]}...")  
         
         # Admin context instructions
         admin_additional_instructions = "ADMIN MODE: Full administrative capabilities active." ##TODO: Does this do anything? 
@@ -131,7 +131,7 @@ async def create_thread(
     """
     Create a new chat thread for the current admin(when new threads on miscio admin dashboard are created)
     """
-    #logger.info(f"POST /threads - Creating new thread for admin {current_admin.id}")
+    logger.warning(f"1.c POST /threads - Creating new thread for admin {current_admin.id}")
     try:
         # Create OpenAI thread
         thread_data = await openai_service.create_thread()
@@ -162,7 +162,7 @@ async def get_threads(current_admin: Admin = Depends(get_current_admin_user)):
     which would be used to populate the chat screen in an admin dashboard
     Note: Does not contain the messages, only the thread metadata
     """
-    #logger.info(f"GET /threads - Retrieving all threads for admin {current_admin.id}")
+    logger.warning(f"1.d GET /threads - Retrieving all threads for admin {current_admin.id}")
     try:
         cursor = db.db.threads.find({"admin_id": str(current_admin.id)})
         threads = await cursor.to_list(length=None) # retrieves all matching documents as a list
@@ -200,7 +200,7 @@ async def get_thread_messages(
     Retrieves all messages for a specific thread, 
     which would be used to populate a single chat conversation in the admin dashboard
     """
-    #logger.info(f"GET /threads/{thread_id}/messages - Retrieving messages for thread")
+    logger.warning(f"1.e GET /threads/{thread_id}/messages - Retrieving messages for thread")
     try:
         chat_history = await db.db.chat_histories.find_one(
             {"thread_id": thread_id, "admin_id": str(current_admin.id)}
@@ -228,10 +228,10 @@ async def create_message(
     openai_service: OpenAIService = Depends(get_openai_service),
     campaign_service: CampaignService = Depends(get_campaign_service),
 ):
-    #logger.info(f"POST /threads/{thread_id}/messages - Creating new message in thread")
+    logger.warning(f"i.f POST /threads/{thread_id}/messages - Creating new message in thread")
     try:
         content = message.get("content", "")
-        logger.info(f"e2d: Thread message entry - Admin: {current_admin.id}, Thread: {thread_id}, Content: {content[:100]}...")  # ADD THIS
+        logger.warning(f"1.f Thread message entry - Admin: {current_admin.id}, Thread: {thread_id}, Content: {content[:100]}...")  # ADD THIS
 
         
         # Generate loading messages immediately (for testing - just log them)
@@ -304,7 +304,7 @@ async def update_thread_title(
     current_admin: Admin = Depends(get_current_admin_user)
 ):
     """Update the title of a thread."""
-    #logger.info(f"PUT /threads/{thread_id}/title - Updating title")
+    logger.warning(f"1.g PUT /threads/{thread_id}/title - Updating title")
     try:
         title = title_data.get("title")
         if not title:
@@ -342,7 +342,7 @@ async def generate_loading_messages_endpoint(
     """
     Generate contextual loading messages for a user prompt - frontend endpoint
     """
-    #logger.info(f"POST /loading-messages - Generating loading messages")
+    logger.warning(f"1.h POST /loading-messages - Generating loading messages")
     try:
         content = message.get("content")
         if not content:
