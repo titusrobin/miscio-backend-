@@ -23,7 +23,7 @@ class SendGridService:
         
         """
         try:
-            logger.info(f"CMP: Email send - To: {to_email}, Type: {message_type}, Subject: {subject[:50]}...")  # ADD THIS
+            # logger.info(f"CMP: Email send - To: {to_email}, Type: {message_type}, Subject: {subject[:50]}...")  # ADD THIS
 
             # Only use Re: prefix for replies to student messages, not for new campaigns
             if subject.strip() == "":
@@ -54,7 +54,7 @@ class SendGridService:
             sg = SendGridAPIClient(self.api_key)
             response = sg.send(mail)
             
-            logger.info(f"Email sent to {to_email} with status {response.status_code}")
+            # logger.info(f"Email sent to {to_email} with status {response.status_code}")
             return True
             
         except Exception as e:

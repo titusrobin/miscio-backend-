@@ -321,7 +321,7 @@ class OpenAIService(BaseAPIService):
                         }
 
             # Create the assistant using the OpenAI API
-            logger.info(f"Creating assistant for admin {admin_id} via endpoint: {self.base_url}/assistants")
+            #logger.info(f"Creating assistant for admin {admin_id} via endpoint: {self.base_url}/assistants")
             #logger.info(f"Assistant configuration: {json.dumps(assistant_data, indent=2)}")
             response = await self.make_request(
                 method="POST",
@@ -378,7 +378,7 @@ class OpenAIService(BaseAPIService):
         1. Thread is simply a container for storing messages
         2. Run actual execution of assistant's instructions
         """
-        logger.info(f"CMP: OpenAI processing - Thread: {thread_id}, Assistant: {assistant_id}, Message: {message[:100]}...")  # ADD THIS
+        # logger.info(f"CMP: OpenAI processing - Thread: {thread_id}, Assistant: {assistant_id}, Message: {message[:100]}...")  # ADD THIS
         #logger.info(f"Starting to process message in thread {thread_id}")
         #logger.info(f"Assistant ID: {assistant_id}")
         #logger.info(f"Run handler provided: {run_handler is not None}")
@@ -417,7 +417,7 @@ class OpenAIService(BaseAPIService):
                         headers=self.headers,
                         data={"tools": tools}
                     )
-                    logger.info(f"Added file_search tool to assistant {assistant_id}")
+                    # logger.info(f"Added file_search tool to assistant {assistant_id}")
                     
             except Exception as e:
                 logger.error(f"Error verifying assistant {assistant_id}: {str(e)}")
@@ -443,7 +443,7 @@ class OpenAIService(BaseAPIService):
             # NEW: Add additional_instructions if provided
             if additional_instructions:
                 run_data["additional_instructions"] = additional_instructions
-                logger.info(f"CMP: OpenAI context mode - {additional_instructions[:100]}...")  # ADD THIS
+                # logger.info(f"CMP: OpenAI context mode - {additional_instructions[:100]}...")  # ADD THIS
                 #logger.info(f"Including additional instructions for role: {'student' if 'STUDENT' in additional_instructions else 'admin'}")
             
             # Create and start a new run with improved error handling
@@ -662,7 +662,7 @@ class OpenAIService(BaseAPIService):
         """
         try:
             filename = os.path.basename(file_path)
-            logger.info(f"Uploading file: {filename} from path: {file_path}")
+            # logger.info(f"Uploading file: {filename} from path: {file_path}")
             
             client = await self.get_client()
             
@@ -684,7 +684,7 @@ class OpenAIService(BaseAPIService):
                 response.raise_for_status()
                 result = response.json()
                 
-                logger.info(f"File uploaded successfully: {result.get('id')}")
+                # logger.info(f"File uploaded successfully: {result.get('id')}")
                 return result
                 
         except Exception as e:
@@ -706,7 +706,7 @@ class OpenAIService(BaseAPIService):
                     file_ids = [file_ids]
                 data["file_ids"] = file_ids
                 
-            logger.info(f"Creating vector store with data: {json.dumps(data)}")
+            # logger.info(f"Creating vector store with data: {json.dumps(data)}")
                 
             # Request to create vector store
             response = await self.make_request(
@@ -722,7 +722,7 @@ class OpenAIService(BaseAPIService):
                 raise Exception("Empty response from vector store creation API")
             
             vector_store_id = response.get("id")
-            logger.info(f"Vector store created: {vector_store_id}")
+            # logger.info(f"Vector store created: {vector_store_id}")
             
             # If file_ids were provided, poll until processing is complete
             if file_ids:
@@ -761,12 +761,12 @@ class OpenAIService(BaseAPIService):
                 
                 # If no files are still in progress, we're done
                 if in_progress == 0:
-                    logger.info(f"Vector store {vector_store_id} processing complete")
+                    # logger.info(f"Vector store {vector_store_id} processing complete")
                     return response
                     
                 # Wait before retrying
                 retry_count += 1
-                logger.info(f"Vector store processing in progress: {in_progress} files. Retry {retry_count}/{MAX_RETRIES}")
+                # logger.info(f"Vector store processing in progress: {in_progress} files. Retry {retry_count}/{MAX_RETRIES}")
                 await asyncio.sleep(3)
                 
             except Exception as e:
@@ -797,7 +797,7 @@ class OpenAIService(BaseAPIService):
                 data={"file_id": file_id}
             )
             
-            logger.info(f"File {file_id} added to vector store {vector_store_id}")
+            # logger.info(f"File {file_id} added to vector store {vector_store_id}")
             
             # Poll until processing is complete
             await self.poll_vector_store_file_status(vector_store_id, file_id)
@@ -834,7 +834,7 @@ class OpenAIService(BaseAPIService):
                 status = response.get("status")
                 
                 if status == "completed":
-                    logger.info(f"File {file_id} processing complete")
+                    # logger.info(f"File {file_id} processing complete")
                     return response
                 elif status == "failed":
                     error_message = response.get("error", {}).get("message", "Unknown error")
@@ -843,7 +843,7 @@ class OpenAIService(BaseAPIService):
                     
                 # Wait before retrying
                 retry_count += 1
-                logger.info(f"File processing in progress: {status}. Retry {retry_count}/{MAX_RETRIES}")
+                # logger.info(f"File processing in progress: {status}. Retry {retry_count}/{MAX_RETRIES}")
                 await asyncio.sleep(3)
                 
             except Exception as e:
@@ -869,7 +869,7 @@ class OpenAIService(BaseAPIService):
                 headers=self.headers
             )
             
-            logger.info(f"File {file_id} removed from vector store {vector_store_id}")
+            # logger.info(f"File {file_id} removed from vector store {vector_store_id}")
         except Exception as e:
             logger.error(f"Error removing file from vector store: {str(e)}")
             raise Exception(f"Failed to remove file from vector store: {str(e)}")
@@ -888,7 +888,7 @@ class OpenAIService(BaseAPIService):
                 headers=self.headers
             )
             
-            logger.info(f"File {file_id} deleted from OpenAI")
+            # logger.info(f"File {file_id} deleted from OpenAI")
         except Exception as e:
             logger.error(f"Error deleting file: {str(e)}")
             raise Exception(f"Failed to delete file: {str(e)}")
@@ -937,7 +937,7 @@ class OpenAIService(BaseAPIService):
                 }
             )
             
-            logger.info(f"Vector store {vector_store_id} attached to assistant {assistant_id}")
+            # logger.info(f"Vector store {vector_store_id} attached to assistant {assistant_id}")
             return response
         except Exception as e:
             logger.error(f"Error attaching vector store to assistant: {str(e)}")
@@ -1069,7 +1069,7 @@ class OpenAIService(BaseAPIService):
                         headers=self.headers
                     )
                     
-                    logger.info(f"Loading assistant run status: {status_response['status']}")
+                    # logger.info(f"Loading assistant run status: {status_response['status']}")
                     
                     if status_response["status"] == "completed":
                         # Get the response
@@ -1084,13 +1084,13 @@ class OpenAIService(BaseAPIService):
                             message_content = messages_response["data"][0].get("content", [])
                             if message_content and message_content[0].get("type") == "text":
                                 response_text = message_content[0]["text"]["value"]
-                                logger.info(f"Loading assistant raw response: {response_text}")
+                                # logger.info(f"Loading assistant raw response: {response_text}")
                                 
                                 # Extract JSON from response that might have extra text
                                 loading_messages = self._extract_json_from_response(response_text)
                                 
                                 if loading_messages and isinstance(loading_messages, list):
-                                    logger.info(f"Successfully generated {len(loading_messages)} loading messages")
+                                    # logger.info(f"Successfully generated {len(loading_messages)} loading messages")
                                     return loading_messages
                                 else:
                                     logger.warning("Loading assistant didn't return a valid JSON array")

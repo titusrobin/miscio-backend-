@@ -24,7 +24,7 @@ class FeedbackConversationService:
     ) -> FeedbackConversationState:
         """Initialize conversation state for a student starting a feedback campaign"""
         try:
-            logger.info(f"CMP: Feedback conversation init - Student: {student_id}, Campaign: {campaign_id}")  # ADD THIS
+            #logger.info(f"CMP: Feedback conversation init - Student: {student_id}, Campaign: {campaign_id}")  # ADD THIS
 
             # Get campaign questions
             campaign = await self.db.campaigns.find_one({"_id": ObjectId(campaign_id)})
@@ -38,7 +38,7 @@ class FeedbackConversationService:
             })
             
             if existing:
-                logger.info(f"Resuming existing conversation for student {student_id}")
+                # logger.info(f"Resuming existing conversation for student {student_id}")
                 return FeedbackConversationState(**existing)
             
             # Create question progress tracking
@@ -64,11 +64,11 @@ class FeedbackConversationService:
             # Save to database
             await self.db.feedback_conversations.insert_one(conversation_state.dict())
             
-            logger.info(f"Initialized feedback conversation for student {student_id}, campaign {campaign_id}")
+            # logger.info(f"Initialized feedback conversation for student {student_id}, campaign {campaign_id}")
             return conversation_state
             
         except Exception as e:
-            logger.error(f"Error initializing conversation: {str(e)}")
+            # logger.error(f"Error initializing conversation: {str(e)}")
             raise
     
     async def get_conversation_state(
@@ -263,7 +263,7 @@ Guidelines:
                 conversation_state.dict()
             )
             
-            logger.info(f"Updated conversation state: {conversation_state.questions_completed}/{conversation_state.total_questions} questions completed")
+            # logger.info(f"Updated conversation state: {conversation_state.questions_completed}/{conversation_state.total_questions} questions completed")
             return conversation_state
             
         except Exception as e:
@@ -278,7 +278,7 @@ Guidelines:
     ) -> str:
         """Generate context-aware prompt for the assistant based on conversation state"""
         try:
-            logger.info(f"CMP: Generating feedback prompt - Student: {student_name}, Progress: {conversation_state.questions_completed}/{conversation_state.total_questions}")  # ADD THIS
+            # logger.info(f"CMP: Generating feedback prompt - Student: {student_name}, Progress: {conversation_state.questions_completed}/{conversation_state.total_questions}")  # ADD THIS
 
             # Get campaign context
             campaign = await self.db.campaigns.find_one({"_id": ObjectId(conversation_state.campaign_id)})

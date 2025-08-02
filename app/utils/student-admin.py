@@ -7,10 +7,10 @@ import os
 from datetime import datetime
 
 # Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+#logging.basicConfig(
+#     level=logging.INFO,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# )
 logger = logging.getLogger(__name__)
 
 # Caleb's admin ID from the screenshot
@@ -25,13 +25,13 @@ async def migrate_students():
     mongo_url = os.environ.get("MONGODB_URL", "mongodb://localhost:27017")
     db_name = os.environ.get("MONGODB_DB_NAME", "MiscioP1")
     
-    logger.info(f"Connecting to MongoDB at {mongo_url}")
+    # logger.info(f"Connecting to MongoDB at {mongo_url}")
     client = AsyncIOMotorClient(mongo_url)
     db = client[db_name]
     
     # Get count of students without admin_id
     count = await db.students.count_documents({"admin_id": {"$exists": False}})
-    logger.info(f"Found {count} students without admin_id")
+    # logger.info(f"Found {count} students without admin_id")
     
     if count > 0:
         # Update all students without admin_id to use Caleb's admin ID
@@ -39,15 +39,15 @@ async def migrate_students():
             {"admin_id": {"$exists": False}},
             {"$set": {"admin_id": CALEB_ADMIN_ID}}
         )
-        logger.info(f"Updated {result.modified_count} students with Caleb's admin_id")
+        # logger.info(f"Updated {result.modified_count} students with Caleb's admin_id")
     
     # Log total student count after migration
     total_count = await db.students.count_documents({})
     caleb_students = await db.students.count_documents({"admin_id": CALEB_ADMIN_ID})
-    logger.info(f"Total students in database: {total_count}")
-    logger.info(f"Students assigned to Caleb: {caleb_students}")
+    # logger.info(f"Total students in database: {total_count}")
+    # logger.info(f"Students assigned to Caleb: {caleb_students}")
     
-    logger.info("Migration completed successfully")
+    # logger.info("Migration completed successfully")
 
 if __name__ == "__main__":
     logger.info("Starting student migration")

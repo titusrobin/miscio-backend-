@@ -91,7 +91,7 @@ class CampaignService:
             result = await self.db.campaigns.insert_one(campaign_data)
             campaign_data["id"] = str(result.inserted_id)
             
-            logger.info(f"Created draft campaign with ID: {campaign_data['id']}")
+            # logger.info(f"Created draft campaign with ID: {campaign_data['id']}")
             return campaign_data
             
         except Exception as e:
@@ -154,7 +154,7 @@ class CampaignService:
             result = await self.db.campaigns.insert_one(campaign_data)
             campaign_data["id"] = str(result.inserted_id)
             
-            logger.info(f"Created feedback draft campaign with ID: {campaign_data['id']}")
+            # logger.info(f"Created feedback draft campaign with ID: {campaign_data['id']}")
             return campaign_data
             
         except Exception as e:
@@ -187,7 +187,7 @@ class CampaignService:
             if campaign["status"] != CampaignStatus.DRAFT.value:
                 raise HTTPException(status_code=400, detail=f"Campaign is not in draft status")
             
-            logger.info(f"CMP: Campaign execution start - ID: {approval_request.campaign_id}, Type: {campaign.get('type')}, Status: {campaign.get('status')}")  # ADD THIS
+            # logger.info(f"CMP: Campaign execution start - ID: {approval_request.campaign_id}, Type: {campaign.get('type')}, Status: {campaign.get('status')}")  # ADD THIS
 
             # Handle actions
             if approval_request.action == "cancel":
@@ -240,7 +240,7 @@ class CampaignService:
             interaction_data["admin_id"] = admin_id
         
         await self.db.interactions.insert_one(interaction_data, session=session)
-        logger.debug(f"Recorded {interaction_type} interaction for student {student_id}")
+        # logger.debug(f"Recorded {interaction_type} interaction for student {student_id}")
         return interaction_data
 
     async def _get_admin_data(self, admin_id: str, session=None):
@@ -301,7 +301,7 @@ class CampaignService:
             
             if response and "choices" in response and len(response["choices"]) > 0:
                 message = response["choices"][0]["message"]["content"].strip()
-                logger.info(f"Generated sample message for campaign: {draft_request.campaign_purpose}")
+                # logger.info(f"Generated sample message for campaign: {draft_request.campaign_purpose}")
                 return message
             else:
                 logger.warning("No response from OpenAI, using fallback")
@@ -394,7 +394,7 @@ class CampaignService:
             if response and "choices" in response and len(response["choices"]) > 0:
                 subject = response["choices"][0]["message"]["content"].strip()
                 subject = subject.strip('"').strip("'")
-                logger.info(f"Generated messaging subject: {subject}")
+                # logger.info(f"Generated messaging subject: {subject}")
                 return subject
             else:
                 return self._generate_fallback_subject(draft_request)
@@ -425,7 +425,7 @@ class CampaignService:
                 }
             )
             
-            logger.info(f"Campaign {campaign['_id']} cancelled by admin {admin_id}")
+            # logger.info(f"Campaign {campaign['_id']} cancelled by admin {admin_id}")
             
             return {
                 "status": "success",
@@ -472,7 +472,7 @@ class CampaignService:
                 }
             )
             
-            logger.info(f"Campaign {campaign['_id']} draft modified by admin {admin_id}")
+            #logger.info(f"Campaign {campaign['_id']} draft modified by admin {admin_id}")
             
             return {
                 "status": "success", 
@@ -498,7 +498,7 @@ class CampaignService:
                     
                     if campaign_type == CampaignType.FEEDBACK.value:
                         # FEEDBACK CAMPAIGN EXECUTION - ENHANCED WITH EMAIL SENDING
-                        logger.info(f"CMP: Executing feedback campaign: {campaign['_id']}")
+                        # logger.info(f"CMP: Executing feedback campaign: {campaign['_id']}")
 
                         # Generate dynamic initial conversation starter message
                         feedback_metadata = campaign.get("feedback_metadata", {})
@@ -550,7 +550,7 @@ class CampaignService:
                             session=session
                         ).to_list(length=None)
                         
-                        logger.info(f"Executing feedback campaign for {len(students)} students")
+                        # logger.info(f"Executing feedback campaign for {len(students)} students")
                         
 
                         # Send initial emails to start conversations
@@ -596,7 +596,7 @@ class CampaignService:
                                 
                                 successful_messages += 1
 
-                                logger.info(f"CMP: Feedback campaign {campaign['_id']} initiated: {successful_messages} sent, {failed_messages} failed")
+                                # logger.info(f"CMP: Feedback campaign {campaign['_id']} initiated: {successful_messages} sent, {failed_messages} failed")
                                 
                             except Exception as e:
                                 logger.error(f"Error sending to student {student['_id']}: {str(e)}")
@@ -626,7 +626,7 @@ class CampaignService:
                             session=session
                         )
                         
-                        logger.info(f"Feedback campaign {campaign['_id']} initiated: {successful_messages} sent, {failed_messages} failed")
+                        # logger.info(f"Feedback campaign {campaign['_id']} initiated: {successful_messages} sent, {failed_messages} failed")
                         
                         return {
                             "status": "success",
@@ -643,11 +643,11 @@ class CampaignService:
                         final_subject = approval_request.modified_subject or draft_content.get("subject")
 
                         # 🔍 DEBUG
-                        logger.info(f"🚨 EXECUTION DEBUG:")
-                        logger.info(f"Campaign ID: {campaign.get('_id')}")
-                        logger.info(f"approval_request.modified_message: {approval_request.modified_message}")
-                        logger.info(f"draft_content.message: {draft_content.get('message', '')[:100]}...")
-                        logger.info(f"FINAL MESSAGE: {final_message[:100]}...")
+                        # logger.info(f"🚨 EXECUTION DEBUG:")
+                        # logger.info(f"Campaign ID: {campaign.get('_id')}")
+                        # logger.info(f"approval_request.modified_message: {approval_request.modified_message}")
+                        # logger.info(f"draft_content.message: {draft_content.get('message', '')[:100]}...")
+                        # logger.info(f"FINAL MESSAGE: {final_message[:100]}...")
                         
                         if not final_message:
                             raise Exception("No message content available for execution")
@@ -687,7 +687,7 @@ class CampaignService:
                             session=session
                         ).to_list(length=None)
                         
-                        logger.info(f"Executing messaging campaign for {len(students)} students")
+                        # logger.info(f"Executing messaging campaign for {len(students)} students")
                         
                         # Execute campaign - send to all students
                         successful_messages = 0
@@ -758,7 +758,7 @@ class CampaignService:
                             session=session
                         )
                         
-                        logger.info(f"Messaging campaign {campaign['_id']} completed successfully: {successful_messages} sent, {failed_messages} failed")
+                        # logger.info(f"Messaging campaign {campaign['_id']} completed successfully: {successful_messages} sent, {failed_messages} failed")
                         
                         return {
                             "status": "success",
@@ -877,7 +877,7 @@ class CampaignService:
                 
                 if campaigns:
                     campaign_ids = [str(campaign["_id"]) for campaign in campaigns]
-                    logger.info(f"Found {len(campaign_ids)} campaigns for thread {thread_id}")
+                    # logger.info(f"Found {len(campaign_ids)} campaigns for thread {thread_id}")
                     filter_query["campaign_id"] = {"$in": campaign_ids}
                 else:
                     logger.warning(f"No campaigns found for thread {thread_id}")
@@ -1018,7 +1018,7 @@ class CampaignService:
             # Clean up the response if needed
             message = response.strip()
             
-            logger.info(f"Generated personalized message for {student_name}")
+            # logger.info(f"Generated personalized message for {student_name}")
             return message
             
         except Exception as e:
@@ -1042,7 +1042,7 @@ class CampaignService:
         """Simple handler for function calls during message generation.
         Just logs what was called and returns empty outputs to avoid errors."""
         
-        logger.info(f"Function called during message generation: {json.dumps(tool_calls, indent=2)}")
+        # logger.info(f"Function called during message generation: {json.dumps(tool_calls, indent=2)}")
         
         # Return minimal valid outputs to satisfy the API
         return [{"tool_call_id": call["id"], "output": "{}"} for call in tool_calls]
@@ -1066,7 +1066,7 @@ class CampaignService:
                 )
                 processed_questions.append(question)
             
-            logger.info(f"Processed {len(processed_questions)} admin-provided questions")
+            # logger.info(f"Processed {len(processed_questions)} admin-provided questions")
             return processed_questions
             
         except Exception as e:
@@ -1151,7 +1151,7 @@ class CampaignService:
                         )
                         generated_questions.append(question)
                     
-                    logger.info(f"Generated {len(generated_questions)} research questions")
+                    # logger.info(f"Generated {len(generated_questions)} research questions")
                     return generated_questions
                     
                 except json.JSONDecodeError as e:
@@ -1197,7 +1197,7 @@ class CampaignService:
             )
         ]
         
-        logger.info(f"Using {len(fallback_questions)} fallback questions")
+        # logger.info(f"Using {len(fallback_questions)} fallback questions")
         return fallback_questions
     
     async def _generate_feedback_subject(
@@ -1247,7 +1247,7 @@ class CampaignService:
                 subject = response["choices"][0]["message"]["content"].strip()
                 # Remove quotes if AI added them
                 subject = subject.strip('"').strip("'")
-                logger.info(f"Generated feedback subject: {subject}")
+                # logger.info(f"Generated feedback subject: {subject}")
                 return subject
             else:
                 return self._generate_fallback_feedback_subject(campaign_purpose, research_topic)
@@ -1304,7 +1304,7 @@ class CampaignService:
             
             if response and "choices" in response and len(response["choices"]) > 0:
                 message = response["choices"][0]["message"]["content"].strip()
-                logger.info(f"Generated feedback initial message")
+                # logger.info(f"Generated feedback initial message")
                 return message
             else:
                 return self._generate_fallback_feedback_message(campaign_purpose, research_topic, conversation_style)
@@ -1317,7 +1317,7 @@ class CampaignService:
     #####PREV#######
     async def _execute_legacy_campaign(self, campaign_data: dict, campaign_context: dict, session):
         """Execute a legacy campaign immediately"""
-        logger.info(f"CMP: Executing legacy campaign: {campaign_data}")
+        # logger.info(f"CMP: Executing legacy campaign: {campaign_data}")
         # Get students
         students = await self.db.students.find(
             {"admin_id": campaign_data["admin_id"], "status": "active"}, 
@@ -1356,7 +1356,7 @@ class CampaignService:
                     )
                     contact_method = "whatsapp"
                 else:
-                    logger.warning(f"No valid contact method for student {student['_id']}")
+                    # logger.warning(f"No valid contact method for student {student['_id']}")
                     failed_messages += 1
                     continue
                 
@@ -1375,7 +1375,7 @@ class CampaignService:
                 successful_messages += 1
                 
             except Exception as e:
-                logger.error(f"Error processing student {student['_id']}: {str(e)}")
+                # logger.error(f"Error processing student {student['_id']}: {str(e)}")
                 failed_messages += 1
 
         # Update with execution summary
@@ -1399,7 +1399,7 @@ class CampaignService:
         LEGACY METHOD - Creates a campaign using the old workflow
         Maintained for backward compatibility
         """
-        logger.info(f"CMP: Creating legacy campaign: {campaign} in thread: {thread_id}")
+        # logger.info(f"CMP: Creating legacy campaign: {campaign} in thread: {thread_id}")
         try:
             async with await self.db.client.start_session() as session:
                 async with session.start_transaction():
@@ -1452,7 +1452,7 @@ class CampaignService:
                     return campaign_data
 
         except Exception as e:
-            logger.error(f"Error creating legacy campaign: {str(e)}")
+            # logger.error(f"Error creating legacy campaign: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to create legacy campaign: {str(e)}",

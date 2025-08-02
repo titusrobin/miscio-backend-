@@ -231,7 +231,7 @@ async def create_message(
     #logger.info(f"POST /threads/{thread_id}/messages - Creating new message in thread")
     try:
         content = message.get("content", "")
-        logger.info(f"CMP: Thread message entry - Admin: {current_admin.id}, Thread: {thread_id}, Content: {content[:100]}...")  # ADD THIS
+        logger.info(f"e2d: Thread message entry - Admin: {current_admin.id}, Thread: {thread_id}, Content: {content[:100]}...")  # ADD THIS
 
         
         # Generate loading messages immediately (for testing - just log them)
@@ -354,7 +354,7 @@ async def generate_loading_messages_endpoint(
         # Generate loading messages
         try:
             loading_messages = await openai_service.generate_loading_messages(content)
-            logger.info(f"Generated {len(loading_messages)} loading messages for frontend")
+            #logger.info(f"Generated {len(loading_messages)} loading messages for frontend")
             return {"loading_messages": loading_messages}
         except Exception as e:
             logger.error(f"Failed to generate loading messages: {str(e)}")
@@ -390,7 +390,7 @@ async def handle_tool_calls(
             if function_name == "create_messaging_draft":
                 # Create draft campaign using new workflow
                 try:
-                    logger.info(f"e2e: Creating messaging draft - Purpose: {arguments.get('campaign_purpose', '')[:50]}...") 
+                    #logger.info(f"e2e: Creating messaging draft - Purpose: {arguments.get('campaign_purpose', '')[:50]}...") 
 
                     # Create CampaignDraftRequest from arguments
                     draft_request = CampaignDraftRequest(
@@ -437,10 +437,10 @@ async def handle_tool_calls(
                         }
                     )
                     
-                    logger.info(f"Successfully created draft campaign: {result.get('id')}")
+                    #logger.info(f"Successfully created draft campaign: {result.get('id')}")
                     
                 except Exception as e:
-                    logger.error(f"Error creating messaging draft: {str(e)}")
+                    #logger.error(f"Error creating messaging draft: {str(e)}")
                     tool_outputs.append(
                         {
                             "tool_call_id": tool_call["id"],
@@ -454,7 +454,7 @@ async def handle_tool_calls(
             elif function_name == "create_feedback_draft":
                 # Create feedback campaign draft using new workflow
                 try:
-                    logger.info(f"e2e: Creating feedback draft - Topic: {arguments.get('research_topic', '')[:50]}...")  # ADD THIS
+                    #logger.info(f"e2e: Creating feedback draft - Topic: {arguments.get('research_topic', '')[:50]}...")  # ADD THIS
                     
                     # Create FeedbackDraftRequest from arguments
                     draft_request = FeedbackDraftRequest(
@@ -511,7 +511,7 @@ async def handle_tool_calls(
                         }
                     )
                     
-                    logger.info(f"Successfully created feedback draft campaign: {result.get('id')}")
+                    #logger.info(f"Successfully created feedback draft campaign: {result.get('id')}")
                     
                 except Exception as e:
                     logger.error(f"Error creating feedback draft: {str(e)}")
@@ -553,7 +553,7 @@ async def handle_tool_calls(
             elif function_name == "execute_campaign":
                 # Execute approved campaign
                 try:
-                    logger.info(f"e2e: Executing campaign {arguments.get('campaign_id', '')}") 
+                    #logger.info(f"e2e: Executing campaign {arguments.get('campaign_id', '')}") 
         
                     campaign_id = arguments.get("campaign_id", "")
                     confirmation = arguments.get("confirmation", "")
@@ -602,7 +602,7 @@ async def handle_tool_calls(
                         }
                     )
                     
-                    logger.info(f"Successfully executed campaign: {campaign_id}")
+                    #logger.info(f"Successfully executed campaign: {campaign_id}")
                     
                 except Exception as e:
                     logger.error(f"Error executing campaign: {str(e)}")

@@ -16,10 +16,10 @@ class MongoDB:
     db = None # class variable to hold the database reference
 
     async def connect_to_database(self):
-        log.info("Connecting to MongoDB")
+        # log.info("Connecting to MongoDB")
         self.client = AsyncIOMotorClient(settings.MONGODB_URL)
         self.db = self.client[settings.MONGODB_DB_NAME]
-        log.info("Connected to MongoDB")
+        # log.info("Connected to MongoDB")
 
     async def close_database_connection(self):
         if self.client:

@@ -27,7 +27,7 @@ async def upload_file(
     Upload a file to OpenAI and attach it to a vector store.
     The vector store will be attached to the admin's assistant.
     """
-    logger.info(f"File upload request received: {file.filename}")
+    # logger.info(f"File upload request received: {file.filename}")
     
     try:
         # Read file contents
@@ -77,7 +77,7 @@ async def upload_file(
         if not vector_store_id:
             try:
                 # Create a new vector store
-                logger.info(f"Creating new vector store with name: {vs_name} and file ID: {openai_file['id']}")
+                # logger.info(f"Creating new vector store with name: {vs_name} and file ID: {openai_file['id']}")
                 vector_store = await openai_service.create_vector_store(
                     name=vs_name,
                     file_ids=[openai_file["id"]]
@@ -98,7 +98,7 @@ async def upload_file(
                     )
                     
                 vector_store_id = vector_store["id"]
-                logger.info(f"Created new vector store with ID: {vector_store_id}")
+                # logger.info(f"Created new vector store with ID: {vector_store_id}")
                 
             except Exception as vs_error:
                 logger.error(f"Error creating vector store: {str(vs_error)}", exc_info=True)

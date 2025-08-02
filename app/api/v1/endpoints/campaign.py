@@ -81,7 +81,7 @@ async def approve_campaign(
             approval_request=approval_request,
             admin_id=current_admin.id
         )
-        logger.info(f"Campaign approval processed: {result}")
+        # logger.info(f"Campaign approval processed: {result}")
         return result
 
     except Exception as e:
@@ -103,7 +103,7 @@ async def get_pending_campaigns(
     
     try:
         campaigns = await campaign_service.get_pending_campaigns(admin_id=current_admin.id)
-        logger.info(f"Retrieved {len(campaigns)} pending campaigns")
+        #logger.info(f"Retrieved {len(campaigns)} pending campaigns")
         return campaigns
 
     except Exception as e:
@@ -122,7 +122,7 @@ async def get_campaign(
     """
     Get a specific campaign by ID with full details.
     """
-    logger.info(f"GET /{campaign_id} - Retrieving campaign details")
+    # logger.info(f"GET /{campaign_id} - Retrieving campaign details")
     
     try:
         campaign = await campaign_service.get_campaign_by_id(
@@ -152,7 +152,7 @@ async def list_campaigns(
     - status_filter: Filter by campaign status (draft, completed, etc.)
     - limit: Maximum number of campaigns to return
     """
-    logger.info(f"GET / - Listing campaigns with filter: {status_filter}")
+    # logger.info(f"GET / - Listing campaigns with filter: {status_filter}")
     
     try:
         # Build query
@@ -186,7 +186,7 @@ async def list_campaigns(
             }
             formatted_campaigns.append(formatted_campaign)
         
-        logger.info(f"Retrieved {len(formatted_campaigns)} campaigns")
+        # logger.info(f"Retrieved {len(formatted_campaigns)} campaigns")
         return formatted_campaigns
 
     except Exception as e:
@@ -210,7 +210,7 @@ async def create_legacy_campaign(
     Legacy endpoint for immediate campaign execution (backward compatibility).
     This maintains the old workflow for existing integrations.
     """
-    logger.info(f"POST /legacy - Creating legacy campaign: {campaign.description}")
+    # logger.info(f"POST /legacy - Creating legacy campaign: {campaign.description}")
     
     try:
         # Use the existing create_campaign method for immediate execution
@@ -219,11 +219,11 @@ async def create_legacy_campaign(
             admin_id=current_admin.id,
             thread_id=campaign.thread_id
         )
-        logger.info(f"Legacy campaign created successfully: {result}")
+        # logger.info(f"Legacy campaign created successfully: {result}")
         return result
 
     except Exception as e:
-        logger.error(f"Error creating legacy campaign: {str(e)}")
+        # logger.error(f"Error creating legacy campaign: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create legacy campaign: {str(e)}"
@@ -238,7 +238,7 @@ async def get_active_campaign(
     Get the currently active campaign (legacy endpoint).
     Updated to work with new status system.
     """
-    logger.info("GET /active - Retrieving active campaign")
+    # logger.info("GET /active - Retrieving active campaign")
     
     try:
         # Look for executing or completed campaigns (new system)
@@ -284,7 +284,7 @@ async def get_campaign_stats(
     """
     Get detailed statistics for a specific campaign.
     """
-    logger.info(f"GET /{campaign_id}/stats - Retrieving campaign stats")
+    # logger.info(f"GET /{campaign_id}/stats - Retrieving campaign stats")
     
     try:
         return await campaign_service.get_campaign_stats(campaign_id)
@@ -306,7 +306,7 @@ async def get_campaign_status_summary(
     """
     Get a summary of campaign statuses for the dashboard.
     """
-    logger.info("GET /status/summary - Retrieving campaign status summary")
+    # logger.info("GET /status/summary - Retrieving campaign status summary")
     
     try:
         # Aggregate campaigns by status
@@ -379,7 +379,7 @@ async def create_feedback_draft(
     """
     Create a draft feedback campaign with research questions that requires admin approval.
     """
-    logger.info(f"POST /feedback-draft - Creating feedback draft: {draft_request.campaign_purpose}")
+    # logger.info(f"POST /feedback-draft - Creating feedback draft: {draft_request.campaign_purpose}")
     
     try:
         result = await campaign_service.create_feedback_draft(
@@ -387,7 +387,7 @@ async def create_feedback_draft(
             admin_id=current_admin.id,
             thread_id=draft_request.thread_id
         )
-        logger.info(f"Feedback draft campaign created successfully: {result['id']}")
+        # logger.info(f"Feedback draft campaign created successfully: {result['id']}")
         return result
 
     except Exception as e:

@@ -23,7 +23,7 @@ async def login(
     form_data: OAuth2PasswordRequestForm = Depends(), # extracts and validates username and password from form data
     openai_service: OpenAIService = Depends(get_openai_service), # for new admins if they don't already have assistant
 ):
-    logger.info("Login endpoint entered")
+    # logger.info("Login endpoint entered")
 
     admin = await authenticate_admin(form_data.username, form_data.password)
     

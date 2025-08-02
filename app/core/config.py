@@ -61,7 +61,7 @@ class Settings(BaseSettings):
 
     def get_mongodb_settings(self) -> dict: # groups all MongoDB-related settings into a single dictionary
         """Returns MongoDB-specific settings."""
-        logger.info("Getting MongoDB settings")
+        # logger.info("Getting MongoDB settings")
         return {
             "url": self.MONGODB_URL,
             "db_name": self.MONGODB_DB_NAME,
@@ -71,7 +71,7 @@ class Settings(BaseSettings):
 
     def get_redis_settings(self) -> dict: # groups all Redis-related settings into a single dictionary
         """Returns Redis-specific settings."""
-        logger.info("Getting Redis settings")
+        # logger.info("Getting Redis settings")
         return {
             "url": self.REDIS_URL,
             "max_connections": self.REDIS_MAX_CONNECTIONS,
@@ -82,7 +82,7 @@ class Settings(BaseSettings):
 @lru_cache() # decorator ensures the function only runs once
 def get_settings() -> Settings:
     """Returns cached settings instance."""
-    logger.info("Loading settings")
+    # logger.info("Loading settings")
     return Settings()
 
 settings = get_settings()
