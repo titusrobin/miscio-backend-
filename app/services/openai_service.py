@@ -432,7 +432,7 @@ class OpenAIService(BaseAPIService):
                 headers=self.headers,
                 data={"role": "user", "content": message}
             )
-            logger.info(f"process/message() - Created message in thread.")
+            #logger.warning(f"process/message() - Created message in thread.")
 
             # Prepare run data with thread_tool_resources if provided
             run_data = {"assistant_id": assistant_id}
@@ -455,7 +455,7 @@ class OpenAIService(BaseAPIService):
                     data=run_data
                 )
                 run_id = run_response["id"]
-                logger.info(f"process/message() - Started new run with ID: {run_id}")
+                logger.warning(f"process/message() - Started new run with ID")
                 
             except Exception as e:
                 logger.error(f"Failed to start run: {str(e)}")
@@ -476,7 +476,7 @@ class OpenAIService(BaseAPIService):
                     )
                     
                     # Log current status on each check
-                    logger.info(f"process/message() - Run status check {retries+1}/{max_retries}: {status_response['status']}")
+                    logger.warning(f"process/message() - Run status check {retries+1}/{max_retries}: {status_response['status']}")
                     
                 except Exception as e:
                     logger.error(f"Error checking run status: {str(e)}")
@@ -490,10 +490,10 @@ class OpenAIService(BaseAPIService):
                 if status_response["status"] == "requires_action":
                     if run_handler:
                         tool_calls = status_response["required_action"]["submit_tool_outputs"]["tool_calls"]
-                        logger.info(f"process/message RUN: Received tool calls to process at {retries} and tool calls: {tool_calls}")
+                        logger.warning(f"process/message RUN: Received tool calls to process at {retries} and tool calls: {tool_calls}")
                         
                         tool_outputs = await run_handler(tool_calls) # tool_calls is data from OpenAI describing what functions to call and with what parameters
-                        logger.info(f"process/message RUN: Tool outputs: {tool_outputs}")
+                        logger.warning(f"process/message RUN: Tool outputs: {tool_outputs}")
                         
                         # Submit the tool outputs back to OpenAI
                         await self.make_request(
@@ -510,7 +510,7 @@ class OpenAIService(BaseAPIService):
                     
                 # On completion, get the final response
                 elif status_response["status"] == "completed":
-                    logger.info(f"process/message() - Run completed successfully at {retries+1} steps")
+                    logger.warning(f"process/message() - Run completed successfully at {retries+1} steps")
                     
                     try:                     
                         # Get run steps to check if file search was used
@@ -561,7 +561,7 @@ class OpenAIService(BaseAPIService):
                                 #RETURN
                                 if text_content:
                                     #logger.info(f"Response text length: {len(text_content)}")
-                                    logger.info(f"process/message() - Response preview: {text_content[:100]}...")
+                                    #logger.info(f"process/message() - Response preview: {text_content[:100]}...")
                                     return text_content
                                 else:
                                     logger.error("No text value found in message content")

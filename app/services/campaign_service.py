@@ -52,7 +52,7 @@ class CampaignService:
         thread_id: str = None
     ) -> Dict:
         """Create a draft messaging campaign that requires admin approval"""
-        logger.info(f"create_messaging_draft() - Draft request: {draft_request}, Admin ID: {admin_id}, Thread ID: {thread_id}")
+        logger.warning(f"create_messaging_draft() - Draft request: {draft_request}, Admin ID: {admin_id}, Thread ID: {thread_id}")
         
         try:
             # Generate sample message
@@ -90,7 +90,7 @@ class CampaignService:
             
             # Store in database
             result = await self.db.campaigns.insert_one(campaign_data)
-            logger.info(f"create_messaging_draft() -- Inserted data into MongoDB")
+            logger.warning(f"create_messaging_draft() -- Inserted data into MongoDB")
             campaign_data["id"] = str(result.inserted_id)
             
             # logger.info(f"Created draft campaign with ID: {campaign_data['id']}")
@@ -261,7 +261,7 @@ class CampaignService:
 
     async def _generate_sample_message(self, draft_request: CampaignDraftRequest, admin_id: str) -> str:
         """Generate a sample message using direct OpenAI API call"""
-        logger.info(f"generate_sample_message() -- Passing to chat completions API")
+        logger.warning(f"generate_sample_message() -- Passing to chat completions API")
         try:
             # Create a simple message generation prompt
             prompt = f"""Create a professional, engaging message for students. 
@@ -301,7 +301,7 @@ class CampaignService:
                 headers=headers,
                 data=data
             )
-            logger.info(f"generate_sample_message() -- OpenAI response: {response}")
+            logger.warning(f"generate_sample_message() -- OpenAI response: {response}")
             
             if response and "choices" in response and len(response["choices"]) > 0:
                 message = response["choices"][0]["message"]["content"].strip()

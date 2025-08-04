@@ -257,7 +257,7 @@ async def create_message(
             additional_instructions=admin_additional_instructions
         )
 
-        logger.info(f"create_message() DONE - OpenAI response: {response}")
+        logger.warning(f"create_message() DONE - OpenAI response: {response}")
         
         messages = [ #create message array to be stored in mongodb
             {
@@ -392,7 +392,7 @@ async def handle_tool_calls(
             if function_name == "create_messaging_draft":
                 # Create draft campaign using new workflow
                 try:
-                    logger.info(f"handle_tool_calls() - Function: {function_name} - Arguments: {json.dumps(arguments, indent=2)}")
+                    logger.warning(f"handle_tool_calls() - Function: {function_name} - Arguments: {json.dumps(arguments, indent=2)}")
 
                     # Create CampaignDraftRequest from arguments
                     draft_request = CampaignDraftRequest(
@@ -412,7 +412,7 @@ async def handle_tool_calls(
                         thread_id=thread_id
                     )
 
-                    logger.info(f"handle_tool_calls() - Draft created successfully: {result}")
+                    logger.warning(f"handle_tool_calls() - Draft created successfully: {result}")
                     # Get the generated draft content
                     draft_content = result.get("draft_content", {})
                     draft_message = draft_content.get("message", "Draft message not available")
