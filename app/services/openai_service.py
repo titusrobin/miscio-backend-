@@ -432,7 +432,7 @@ class OpenAIService(BaseAPIService):
                 headers=self.headers,
                 data={"role": "user", "content": message}
             )
-            #logger.info(f"Created message in thread. Message ID: {message_response.get('id')}")
+            logger.info(f"process/message() - Created message in thread.")
 
             # Prepare run data with thread_tool_resources if provided
             run_data = {"assistant_id": assistant_id}
@@ -455,7 +455,7 @@ class OpenAIService(BaseAPIService):
                     data=run_data
                 )
                 run_id = run_response["id"]
-                #logger.info(f"Started new run with ID: {run_id}")
+                logger.info(f"process/message() - Started new run with ID: {run_id}")
                 
             except Exception as e:
                 logger.error(f"Failed to start run: {str(e)}")
@@ -476,7 +476,7 @@ class OpenAIService(BaseAPIService):
                     )
                     
                     # Log current status on each check
-                    #logger.info(f"Run status check {retries+1}/{max_retries}: {status_response['status']}")
+                    logger.info(f"process/message() - Run status check {retries+1}/{max_retries}: {status_response['status']}")
                     
                 except Exception as e:
                     logger.error(f"Error checking run status: {str(e)}")
@@ -561,7 +561,7 @@ class OpenAIService(BaseAPIService):
                                 #RETURN
                                 if text_content:
                                     #logger.info(f"Response text length: {len(text_content)}")
-                                    #logger.info(f"Response preview: {text_content[:100]}...")
+                                    logger.info(f"process/message() - Response preview: {text_content[:100]}...")
                                     return text_content
                                 else:
                                     logger.error("No text value found in message content")
