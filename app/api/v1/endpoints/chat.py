@@ -222,7 +222,7 @@ async def get_thread_messages(
 
 @router.post("/threads/{thread_id}/messages")
 async def create_message(
-    thread_id: str,
+    thread_id: str, #openai thread id, not a db-generated id
     message: dict,
     current_admin: Admin = Depends(get_current_admin_user),
     openai_service: OpenAIService = Depends(get_openai_service),
@@ -230,8 +230,8 @@ async def create_message(
 ):
     logger.warning(f"i.f POST /threads/{thread_id}/messages - Creating new message in thread")
     try:
-        content = message.get("content", "")
-        logger.warning(f"1.f Thread message entry - Admin: {current_admin.id}, Thread: {thread_id}, Content: {content[:100]}...")  # ADD THIS
+        #content = message.get("content", "")
+        #logger.warning(f"1.f Thread message entry - Admin: {current_admin.id}, Thread: {thread_id}, Content: {content[:100]}...")  # ADD THIS
 
         
         # Generate loading messages immediately (for testing - just log them)
@@ -256,6 +256,8 @@ async def create_message(
             ),
             additional_instructions=admin_additional_instructions
         )
+
+        logger.info(f"create_message() DONE - OpenAI response: {response}")
         
         messages = [ #create message array to be stored in mongodb
             {
@@ -390,7 +392,7 @@ async def handle_tool_calls(
             if function_name == "create_messaging_draft":
                 # Create draft campaign using new workflow
                 try:
-                    #logger.info(f"e2e: Creating messaging draft - Purpose: {arguments.get('campaign_purpose', '')[:50]}...") 
+                    logger.info(f"handle_tool_calls() - Function: {function_name} - Arguments: {json.dumps(arguments, indent=2)}")
 
                     # Create CampaignDraftRequest from arguments
                     draft_request = CampaignDraftRequest(
@@ -409,7 +411,8 @@ async def handle_tool_calls(
                         admin_id=current_admin.id,
                         thread_id=thread_id
                     )
-                    
+
+                    logger.info(f"handle_tool_calls() - Draft created successfully: {result}")
                     # Get the generated draft content
                     draft_content = result.get("draft_content", {})
                     draft_message = draft_content.get("message", "Draft message not available")
@@ -423,7 +426,7 @@ async def handle_tool_calls(
                                         
                     tool_outputs.append(
                         {
-                            "tool_call_id": tool_call["id"],
+                            "tool_call_id": tool_call["id"], #Which function call this result is for 
                             "output": json.dumps(
                                 {
                                     "status": "success",
@@ -436,7 +439,7 @@ async def handle_tool_calls(
                             ),
                         }
                     )
-                    
+
                     #logger.info(f"Successfully created draft campaign: {result.get('id')}")
                     
                 except Exception as e:

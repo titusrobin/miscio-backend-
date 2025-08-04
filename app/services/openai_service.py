@@ -369,7 +369,7 @@ class OpenAIService(BaseAPIService):
         message: str,
         assistant_id: str,
         run_handler: Optional[callable] = None, # optionalfunction to handle tool calls
-        thread_tool_resources: Optional[dict] = None,
+        thread_tool_resources: Optional[dict] = None, # files/rag
         additional_instructions: Optional[str] = None  # NEW PARAMETER
     ) -> str:
         """
@@ -378,7 +378,7 @@ class OpenAIService(BaseAPIService):
         1. Thread is simply a container for storing messages
         2. Run actual execution of assistant's instructions
         """
-        # logger.info(f"CMP: OpenAI processing - Thread: {thread_id}, Assistant: {assistant_id}, Message: {message[:100]}...")  # ADD THIS
+        logger.warning(f"OpenAI process/message() - Thread: {thread_id}, Assistant: {assistant_id}, Message: {message[:100]}...") 
         #logger.info(f"Starting to process message in thread {thread_id}")
         #logger.info(f"Assistant ID: {assistant_id}")
         #logger.info(f"Run handler provided: {run_handler is not None}")
@@ -490,9 +490,10 @@ class OpenAIService(BaseAPIService):
                 if status_response["status"] == "requires_action":
                     if run_handler:
                         tool_calls = status_response["required_action"]["submit_tool_outputs"]["tool_calls"]
-                        #logger.info(f"Received tool calls to process")
+                        logger.info(f"process/message RUN: Received tool calls to process at {retries} and tool calls: {tool_calls}")
                         
                         tool_outputs = await run_handler(tool_calls) # tool_calls is data from OpenAI describing what functions to call and with what parameters
+                        logger.info(f"process/message RUN: Tool outputs: {tool_outputs}")
                         
                         # Submit the tool outputs back to OpenAI
                         await self.make_request(
@@ -509,7 +510,7 @@ class OpenAIService(BaseAPIService):
                     
                 # On completion, get the final response
                 elif status_response["status"] == "completed":
-                    #logger.info(f"Run completed successfully after {retries+1} checks")
+                    logger.info(f"process/message() - Run completed successfully at {retries+1} steps")
                     
                     try:                     
                         # Get run steps to check if file search was used
@@ -557,6 +558,7 @@ class OpenAIService(BaseAPIService):
                                 text_content = next((content["text"]["value"] for content in message_content 
                                                 if content.get("type") == "text" and content.get("text", {}).get("value")), None)
                                 
+                                #RETURN
                                 if text_content:
                                     #logger.info(f"Response text length: {len(text_content)}")
                                     #logger.info(f"Response preview: {text_content[:100]}...")
