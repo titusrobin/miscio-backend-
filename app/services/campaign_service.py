@@ -322,12 +322,13 @@ class CampaignService:
     Tone: {draft_request.tone_and_style}
 
     Requirements:
-    - Keep it concise and student-friendly (2-3 paragraphs max)
-    - Include the key points naturally
-    - Use the specified tone
-    - End with the call to action
+    - Keep it concise and student-friendly(This is CRITICAL -- to the point unless otherwise specified)
+    - Include needed key points naturally
+    - Use any specified tone
+    - End with the call to action(If needed)
     - No asterisks or markdown formatting
     - Make it personal and engaging
+    - DO NOT MAKE UP ANY INFORMATION -- DON'T ASSUME what is not provided please. 
 
     Return only the message content, no extra text."""
 
