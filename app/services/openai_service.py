@@ -132,6 +132,23 @@ class OpenAIService(BaseAPIService):
                 {
                     "type": "function",
                     "function": {
+                        "name": "update_messaging_draft",
+                        "description": "Update an existing messaging draft with specific modifications",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "campaign_id": {"type": "string", "description": "ID of the draft to update"},
+                                "modification_request": {"type": "string", "description": "Specific change requested (e.g., 'make it a one-liner', 'more formal tone')"},
+                                "revised_message": {"type": "string", "description": "The updated message content"},
+                                "revised_subject": {"type": "string", "description": "Updated subject line if needed"}
+                            },
+                            "required": ["campaign_id", "modification_request", "revised_message"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
                         "name": "query_student_chats",
                         "description": "Search through student chat histories",
                         "parameters": {
@@ -193,7 +210,7 @@ class OpenAIService(BaseAPIService):
                 - Confirm the message has been sent to all students
 
                 5. When admin requests changes:
-                - Create a new draft with the requested modifications
+                - Use update_messaging_draft instead of creating a new draft. Always reference the most recent campaign_id from the conversation.
 
                 FEEDBACK CAMPAIGN WORKFLOW:
                 When an admin wants to gather feedback or conduct research:
@@ -493,7 +510,7 @@ class OpenAIService(BaseAPIService):
                         logger.warning(f"process/message RUN: Received tool calls to process at {retries} and tool calls: {tool_calls}")
                         
                         tool_outputs = await run_handler(tool_calls) # tool_calls is data from OpenAI describing what functions to call and with what parameters
-                        logger.warning(f"process/message RUN: Tool outputs: {tool_outputs}")
+                        logger.warning(f"process/message RUN: Tool outputs: {tool_outputs}") #TODO: There's a lot of redundancy in this dict returned / token consumption 
                         
                         # Submit the tool outputs back to OpenAI
                         await self.make_request(

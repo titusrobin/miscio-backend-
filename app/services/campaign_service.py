@@ -49,7 +49,7 @@ class CampaignService:
         self, 
         draft_request: CampaignDraftRequest, 
         admin_id: str, 
-        thread_id: str = None
+        thread_id: str = None #TODO: may be redundant as we pass thread_id in draft_request
     ) -> Dict:
         """Create a draft messaging campaign that requires admin approval"""
         logger.warning(f"create_messaging_draft() - Draft request: {draft_request}, Admin ID: {admin_id}, Thread ID: {thread_id}")
@@ -167,6 +167,55 @@ class CampaignService:
             )
 
 
+    async def update_messaging_draft(
+    self,
+    campaign_id: str,
+    modification_request: str,
+    revised_message: str,
+    revised_subject: str = None,
+    admin_id: str = None
+    ) -> Dict:
+        """Update an existing messaging draft"""
+        try:
+            # Get existing campaign
+            campaign = await self.db.campaigns.find_one({"_id": ObjectId(campaign_id)})
+            if not campaign or campaign["status"] != "draft":
+                raise Exception("Draft not found or not editable")
+            
+            # Update the draft content
+            updated_draft = {
+                "message": revised_message,
+                "subject": revised_subject or campaign["draft_content"]["subject"],
+                "generated_at": datetime.utcnow(),
+                "generation_context": campaign["draft_content"]["generation_context"]
+            }
+            
+            # Add modification history
+            modification_entry = {
+                "action": "modified",
+                "timestamp": datetime.utcnow(),
+                "admin_id": admin_id,
+                "modification_request": modification_request,
+                "notes": f"Draft updated: {modification_request}"
+            }
+            
+            # Update in database
+            await self.db.campaigns.update_one(
+                {"_id": ObjectId(campaign_id)},
+                {
+                    "$set": {"draft_content": updated_draft},
+                    "$push": {"approval_history": modification_entry}
+                }
+            )
+            
+            return {
+                "status": "success",
+                "message": f"Draft updated: {modification_request}",
+                "campaign_id": campaign_id,
+                "updated_content": updated_draft
+            }
+        except Exception as e:
+            raise Exception(f"Failed to update draft: {str(e)}")
 
     async def approve_and_execute_campaign(
         self,
@@ -314,6 +363,62 @@ class CampaignService:
         except Exception as e:
             logger.error(f"Error generating sample message: {str(e)}")
             return self._generate_enhanced_fallback_message(draft_request)
+        
+    async def _generate_updated_message(
+    self, 
+    original_message: str, 
+    modification_request: str, 
+    original_context: dict
+    ) -> str:
+        """Generate an updated message based on specific modification request"""
+        try:
+            prompt = f"""Update this message based on the specific request:
+
+    ORIGINAL MESSAGE: {original_message}
+
+    MODIFICATION REQUEST: {modification_request}
+
+    ORIGINAL CONTEXT: {json.dumps(original_context)}
+
+    Requirements:
+    - Follow the modification request exactly
+    - If "one-liner" is requested, make it truly one sentence
+    - Maintain the original purpose and key information
+    - Keep the same tone unless specifically asked to change it
+
+    Return only the updated message content."""
+
+            # Use OpenAI Chat Completions API directly (same as _generate_sample_message)
+            headers = {
+                "Authorization": f"Bearer {self.openai_service.headers['Authorization'].split(' ')[1]}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "model": "gpt-4-turbo-preview",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 500,
+                "temperature": 0.7
+            }
+            
+            response = await self.openai_service.make_request(
+                method="POST",
+                url="https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                data=data
+            )
+            
+            if response and "choices" in response and len(response["choices"]) > 0:
+                message = response["choices"][0]["message"]["content"].strip()
+                # logger.info(f"Generated updated message for campaign modification")
+                return message
+            else:
+                logger.warning("No response from OpenAI, using fallback")
+                return self._generate_enhanced_fallback_message_for_modification(original_message, modification_request)
+                
+        except Exception as e:
+            logger.error(f"Error generating updated message: {str(e)}")
+            return self._generate_enhanced_fallback_message_for_modification(original_message, modification_request)
 
     def _generate_enhanced_fallback_message(self, draft_request: CampaignDraftRequest) -> str:
         """Generate a well-structured fallback message"""
