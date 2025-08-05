@@ -553,6 +553,49 @@ async def handle_tool_calls(
                         }
                     )
 
+            elif function_name == "update_messaging_draft":
+                try:
+                    logger.warning(f"handle_tool_calls() - Function: {function_name} - Arguments: {json.dumps(arguments, indent=2)}")
+                    
+                    # Get the campaign_id and call the update method
+                    campaign_id = arguments.get("campaign_id")
+                    modification_request = arguments.get("modification_request")
+                    revised_message = arguments.get("revised_message")
+                    revised_subject = arguments.get("revised_subject")
+                    
+                    # Call the update method (you'll need to implement this in CampaignService)
+                    result = await campaign_service.update_messaging_draft(
+                        campaign_id=campaign_id,
+                        modification_request=modification_request,
+                        revised_message=revised_message,
+                        revised_subject=revised_subject,
+                        admin_id=current_admin.id
+                    )
+                    
+                    # Format response for the assistant
+                    response_message = f"Draft updated successfully! Here's the revised message:\n\n{revised_message}\n\nChanges: {modification_request}"
+                    
+                    tool_outputs.append({
+                        "tool_call_id": tool_call["id"],
+                        "output": json.dumps({
+                            "status": "success",
+                            "message": response_message,
+                            "campaign_id": campaign_id,
+                            "modification_request": modification_request,
+                            "revised_message": revised_message
+                        }, default=str)
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error updating messaging draft: {str(e)}")
+                    tool_outputs.append({
+                        "tool_call_id": tool_call["id"],
+                        "output": json.dumps({
+                            "status": "error",
+                            "message": f"Failed to update draft: {str(e)}"
+                        })
+                    })
+            
             elif function_name == "execute_campaign":
                 # Execute approved campaign
                 try:
