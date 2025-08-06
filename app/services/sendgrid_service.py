@@ -28,9 +28,9 @@ class SendGridService:
             # Only use Re: prefix for replies to student messages, not for new campaigns
             if subject.strip() == "":
                 subject = "Message from Miscio Assistant" #TODO: better approach needed
-            elif message_type == "reply" and not subject.startswith("Re:"):
+            #`elif message_type == "reply" and not subject.startswith("Re:"):
                 # Only add Re: if this is a reply to a student message
-                subject = f"Re: {subject}" #TODO: Causing to problematic Re in Outlook? -- no visible issues on Gmail, need to test Yahoo?
+                #subject = f"Re: {subject}" #TODO: Causing to problematic Re in Outlook? -- no visible issues on Gmail, need to test Yahoo?
             
             # Fix the asterisks issue - simply remove them from the message
             message_plain = re.sub(r'\*\*(.*?)\*\*', r'\1', message) 

@@ -196,7 +196,8 @@ class OpenAIService(BaseAPIService):
                 MESSAGING CAMPAIGN WORKFLOW:
                 When an admin wants to send a message to students:
                 1. Automatically detect this is a MESSAGING campaign
-                2. Use create_messaging_draft function to generate a complete draft message
+                2. If you have questions, ask them to better create the draft, but MAKE SURE YOU DO NOT MAKE UP ANY INFORMATION -- DON'T ASSUME what is not provided please.
+                3. Use create_messaging_draft function to generate a complete draft message
                 3. Present the draft with format(example):
 
                 "Here's a draft:
