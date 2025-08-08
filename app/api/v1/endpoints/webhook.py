@@ -373,7 +373,7 @@ async def handle_email_webhook(
                 # Send the response back to the student via email
                 await sendgrid_service.send_message(
                     to_email=email_address,
-                    subject=f"Re: {subject}",
+                    subject=format_reply_subject(subject),
                     message=response,
                     message_type="reply"
                 )
@@ -407,7 +407,7 @@ async def handle_email_webhook(
                 # Send the response back to the student via email
                 await sendgrid_service.send_message(
                     to_email=email_address,
-                    subject=f"Re: {subject}",
+                    subject=format_reply_subject(subject),
                     message=response,
                     message_type="reply"
                 )
@@ -539,3 +539,32 @@ async def handle_student_tool_calls(
             )
     
     return tool_outputs
+
+def format_reply_subject(original_subject: str) -> str:
+    """
+    Format subject line for email replies according to RFC 5322 standards.
+    
+    Rules:
+    - If subject already starts with "Re:", don't add another one
+    - If subject doesn't start with "Re:", add it
+    - Handle case variations (Re:, RE:, re:)
+    - Preserve original subject content
+    
+    Args:
+        original_subject: The subject from the incoming email
+        
+    Returns:
+        Properly formatted reply subject
+    """
+    if not original_subject:
+        return "Re: (no subject)"
+    
+    # Check if subject already has a reply prefix (case insensitive)
+    subject_lower = original_subject.lower().strip()
+    
+    # If it already starts with "Re:" (any case), just return it as-is
+    if subject_lower.startswith("re:"):
+        return original_subject.strip()
+    
+    # Otherwise, add "Re:" prefix
+    return f"Re: {original_subject.strip()}"
