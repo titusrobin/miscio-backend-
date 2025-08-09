@@ -330,7 +330,7 @@ class CampaignService:
     - End with the call to action(If needed)
     - No asterisks or markdown formatting
     - Make it personal and engaging
-    - DO NOT use "Dear Students" - use "Hi everyone" or similar casual greeting
+    - DO NOT use "Dear Students" or "Hi everyone" or any greetings, just the message body 
     - DO NOT include any signature, sign-off, or placeholder names like [Your Name/Team]
     - End naturally without formal closings
     - DO NOT MAKE UP ANY INFORMATION -- DON'T ASSUME what is not provided please. 
