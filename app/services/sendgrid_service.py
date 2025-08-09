@@ -35,7 +35,7 @@ class SendGridService:
             ##TODO: Can we take off header #'s and format accordingly 
 
             if student_name:
-                message_plain = f"{student_name},\n{message_plain}"
+                message_plain = f"{student_name},\n\n{message_plain}"
 
             # Create sender and mail object 
             from_email = Email(self.from_email, self.from_name)

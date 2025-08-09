@@ -45,7 +45,7 @@ class OpenAIService(BaseAPIService):
                                 },
                                 "campaign_details": {
                                     "type": "string",
-                                    "description": "Comprehensive description of what needs to be communicated to students with all important context"
+                                    "description": "Comprehensive description of what needs to be communicated to students with all important context(DO NOT MAKE UP ANY INFORMATION)"
                                 },
                                 "target_audience": {
                                     "type": "string",
@@ -59,11 +59,11 @@ class OpenAIService(BaseAPIService):
                                 },
                                 "key_points": {
                                     "type": "string",
-                                    "description": "Essential information that must be included in the message to students"
+                                    "description": "Essential information that must be included in the message to students(DO NOT MAKE UP ANY INFORMATION)"
                                 },
                                 "call_to_action": {
                                     "type": "string",
-                                    "description": "What students should do after reading (e.g., 'respond with questions', 'check the portal', 'complete registration')",
+                                    "description": "(DO NOT MAKE UP ANY INFORMATION) What students should do after reading (e.g., 'respond with questions', 'check the portal', 'complete registration')",
                                     "default": "respond with any questions"
                                 }
                             },
@@ -181,6 +181,8 @@ class OpenAIService(BaseAPIService):
             - Check for role context in each conversation
             - Admin conversations: Full administrative capabilities
             - Student conversations: Limited to support role with strict confidentiality
+
+            CRITICAL RULE: NEVER ASSUME OR FABRICATE DETAILS. If information is missing, ASK FOR CLARIFICATION.
 
             WHEN IN ADMIN MODE (default):
             """ + """You currently specialize in student communications and campaign management. Your role is to assist school admins create and execute both MESSAGING(broadcast-type) and FEEDBACK(survey-type) communication campaigns.
