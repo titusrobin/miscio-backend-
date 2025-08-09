@@ -23,7 +23,7 @@ class SendGridService:
         
         """
         try:
-            logger.warning(f"send_message() - To: {to_email}, Type: {message_type}, Subject: {subject[:50]}, message: {message[:50]}")
+            logger.warning(f"send_message() - To: {to_email}, Type: {message_type}, Subject: {subject[:50]}, message: {message[:50]}, student_name: {student_name}")
 
             # Only use Re: prefix for replies to student messages, not for new campaigns
             if subject.strip() == "":
@@ -34,7 +34,7 @@ class SendGridService:
             ##TODO: Can we personalize formatting via sendgrid? 
             ##TODO: Can we take off header #'s and format accordingly 
 
-            if student_name and message_type == "initial":
+            if student_name:
                 message_plain = f"{student_name},\n{message_plain}"
 
             # Create sender and mail object 

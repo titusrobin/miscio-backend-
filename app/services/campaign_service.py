@@ -809,13 +809,16 @@ class CampaignService:
                         for student in students: #TODO: Sendgrid concurrent outreach, we don't need the loop if that's possible 
                             try:
                                 contact_method = student.get('preferred_contact_method', 'email')
+
+                                student_name = student.get('first_name', 'Hi')
                                 
                                 if contact_method == 'email' and student.get('email'):
                                     await self.sendgrid_service.send_message(
                                         to_email=student["email"],
                                         subject=final_subject or "Message from Your School",
                                         message=final_message,
-                                        message_type="initial"
+                                        message_type="initial",
+                                        student_name=student_name
                                     )
                                     contact_used = "email"
                                     
