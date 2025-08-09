@@ -176,6 +176,7 @@ class CampaignService:
     admin_id: str = None
     ) -> Dict:
         """Update an existing messaging draft"""
+        logger.warning(f"update_messaging_draft() - mod request: {modification_request}, Admin ID: {admin_id}")
         try:
             # Get existing campaign
             campaign = await self.db.campaigns.find_one({"_id": ObjectId(campaign_id)})
@@ -223,6 +224,7 @@ class CampaignService:
         admin_id: str
     ) -> Dict:
         """Approve a draft campaign and execute it"""
+        logger.warning(f"approve_and_execute_campaign() - Approval request: {approval_request}")
         #logger.info(f"CMP: Processing approval request for campaign: {approval_request.campaign_id}")
         
         try:
@@ -328,6 +330,9 @@ class CampaignService:
     - End with the call to action(If needed)
     - No asterisks or markdown formatting
     - Make it personal and engaging
+    - DO NOT use "Dear Students" - use "Hi everyone" or similar casual greeting
+    - DO NOT include any signature, sign-off, or placeholder names like [Your Name/Team]
+    - End naturally without formal closings
     - DO NOT MAKE UP ANY INFORMATION -- DON'T ASSUME what is not provided please. 
 
     Return only the message content, no extra text."""
@@ -386,7 +391,8 @@ class CampaignService:
     - If "one-liner" is requested, make it truly one sentence
     - Maintain the original purpose and key information
     - Keep the same tone unless specifically asked to change it
-
+    - DO NOT include any signature, sign-off, or placeholder names like [Your Name/Team] (unless explicitly asked for)
+    
     Return only the updated message content."""
 
             # Use OpenAI Chat Completions API directly (same as _generate_sample_message)
@@ -601,6 +607,7 @@ class CampaignService:
     async def _approve_and_execute(self, campaign: dict, approval_request: CampaignApprovalRequest, admin_id: str) -> Dict:
         """Approve and execute a campaign (messaging or feedback)"""
         try:
+            logger.warning(f"_approve_and_execute() - Approval request: {approval_request}")
             async with await self.db.client.start_session() as session:
                 async with session.start_transaction():
                     
@@ -670,13 +677,16 @@ class CampaignService:
                         for student in students:
                             try:
                                 contact_method = student.get('preferred_contact_method', 'email')
+
+                                student_name = student.get('first_name', 'Hi')
                                 
                                 if contact_method == 'email' and student.get('email'):
                                     await self.sendgrid_service.send_message(
                                         to_email=student["email"],
                                         subject=subject_line,
                                         message=initial_message,
-                                        message_type="initial"
+                                        message_type="initial",
+                                        student_name=student_name
                                     )
                                     contact_used = "email"
                                     
@@ -751,13 +761,6 @@ class CampaignService:
                         draft_content = campaign.get("draft_content", {})
                         final_message = approval_request.modified_message or draft_content.get("message")
                         final_subject = approval_request.modified_subject or draft_content.get("subject")
-
-                        # 🔍 DEBUG
-                        # logger.info(f"🚨 EXECUTION DEBUG:")
-                        # logger.info(f"Campaign ID: {campaign.get('_id')}")
-                        # logger.info(f"approval_request.modified_message: {approval_request.modified_message}")
-                        # logger.info(f"draft_content.message: {draft_content.get('message', '')[:100]}...")
-                        # logger.info(f"FINAL MESSAGE: {final_message[:100]}...")
                         
                         if not final_message:
                             raise Exception("No message content available for execution")
@@ -797,13 +800,13 @@ class CampaignService:
                             session=session
                         ).to_list(length=None)
                         
-                        # logger.info(f"Executing messaging campaign for {len(students)} students")
+                        logger.warning(f"_approve_and_execute() - Executing messaging campaign for {len(students)} students")
                         
                         # Execute campaign - send to all students
                         successful_messages = 0
                         failed_messages = 0
                         
-                        for student in students:
+                        for student in students: #TODO: Sendgrid concurrent outreach, we don't need the loop if that's possible 
                             try:
                                 contact_method = student.get('preferred_contact_method', 'email')
                                 

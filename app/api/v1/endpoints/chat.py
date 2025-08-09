@@ -599,7 +599,7 @@ async def handle_tool_calls(
             elif function_name == "execute_campaign":
                 # Execute approved campaign
                 try:
-                    #logger.info(f"e2e: Executing campaign {arguments.get('campaign_id', '')}") 
+                    logger.warning(f"handle_tool_calls() - Function: {function_name} - Arguments: {json.dumps(arguments, indent=2)}")
         
                     campaign_id = arguments.get("campaign_id", "")
                     confirmation = arguments.get("confirmation", "")

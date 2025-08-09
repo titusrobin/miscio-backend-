@@ -17,25 +17,25 @@ class SendGridService:
         self.from_email = settings.SENDGRID_FROM_EMAIL
         self.from_name = settings.SENDGRID_FROM_NAME
         
-    async def send_message(self, to_email: str, subject: str, message: str, message_type: str = "initial"):
+    async def send_message(self, to_email: str, subject: str, message: str, message_type: str = "initial", student_name: str = None):
         """
         Sends an email message to a student.
         
         """
         try:
-            # logger.info(f"CMP: Email send - To: {to_email}, Type: {message_type}, Subject: {subject[:50]}...")  # ADD THIS
+            logger.warning(f"send_message() - To: {to_email}, Type: {message_type}, Subject: {subject[:50]}, message: {message[:50]}")
 
             # Only use Re: prefix for replies to student messages, not for new campaigns
             if subject.strip() == "":
                 subject = "Message from Miscio Assistant" #TODO: better approach needed
-            #`elif message_type == "reply" and not subject.startswith("Re:"):
-                # Only add Re: if this is a reply to a student message
-                #subject = f"Re: {subject}" #TODO: Causing to problematic Re in Outlook? -- no visible issues on Gmail, need to test Yahoo?
             
             # Fix the asterisks issue - simply remove them from the message
             message_plain = re.sub(r'\*\*(.*?)\*\*', r'\1', message) 
             ##TODO: Can we personalize formatting via sendgrid? 
             ##TODO: Can we take off header #'s and format accordingly 
+
+            if student_name and message_type == "initial":
+                message_plain = f"{student_name},\n{message_plain}"
 
             # Create sender and mail object 
             from_email = Email(self.from_email, self.from_name)
