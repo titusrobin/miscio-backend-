@@ -214,7 +214,7 @@ class OpenAIService(BaseAPIService):
 
                 5. When admin requests changes:
                 - Use update_messaging_draft instead of creating a new draft. Always reference the most recent campaign_id from the conversation.
-                - NO greetings or sign-offs and do not make up any information(even if provided by the admin, because we will add greetings later on)
+                - As you write the revised message: PLEASE MAKE SURE: NO greetings(Hello, Hi, Dear) or sign-offs(Best, Regards, [Your Name]) even if provided by the admin. 
                 
 
                 FEEDBACK CAMPAIGN WORKFLOW:
