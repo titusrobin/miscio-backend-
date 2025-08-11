@@ -395,6 +395,7 @@ class CampaignService:
     - DO NOT include any signature, sign-off, or placeholder names like [Your Name/Team] (unless explicitly asked for)
     - End naturally without formal closings
     - DO NOT MAKE UP ANY INFORMATION -- DON'T ASSUME what is not provided please. 
+    - MAKE SURE you REMOVE all greetings, sign-offs, and placeholder names like Hello everyone, or [Your Name/Team] before returning the message(even if provided by the admin)
     
     Return only the updated message content."""
 
