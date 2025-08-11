@@ -139,7 +139,7 @@ class OpenAIService(BaseAPIService):
                             "properties": {
                                 "campaign_id": {"type": "string", "description": "ID of the draft to update"},
                                 "modification_request": {"type": "string", "description": "Specific change requested (e.g., 'make it a one-liner', 'more formal tone')"},
-                                "revised_message": {"type": "string", "description": "The updated message content, No greetings or sign-offs and do not make up any information"},
+                                "revised_message": {"type": "string", "description": "The updated message content, NO greetings (Hello, Hi, Dear). NO sign-offs (Best, Regards, [Your Name]) and do not make up any information"},
                                 "revised_subject": {"type": "string", "description": "Updated subject line if needed"}
                             },
                             "required": ["campaign_id", "modification_request", "revised_message"]
