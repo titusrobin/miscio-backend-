@@ -391,7 +391,10 @@ class CampaignService:
     - If "one-liner" is requested, make it truly one sentence
     - Maintain the original purpose and key information
     - Keep the same tone unless specifically asked to change it
+    - DO NOT use "Dear Students" or "Hi everyone" or any greetings, just the message body
     - DO NOT include any signature, sign-off, or placeholder names like [Your Name/Team] (unless explicitly asked for)
+    - End naturally without formal closings
+    - DO NOT MAKE UP ANY INFORMATION -- DON'T ASSUME what is not provided please. 
     
     Return only the updated message content."""
 
