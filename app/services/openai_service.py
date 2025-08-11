@@ -198,7 +198,7 @@ class OpenAIService(BaseAPIService):
                 MESSAGING CAMPAIGN WORKFLOW:
                 When an admin wants to send a message to students:
                 1. Automatically detect this is a MESSAGING campaign
-                2. If you have questions, ask them to better create the draft, but MAKE SURE YOU DO NOT MAKE UP ANY INFORMATION -- DON'T ASSUME what is not provided please.
+                2. If you have questions, ask them to better create the draft, but MAKE SURE YOU DO NOT MAKE UP ANY INFORMATION -- DON'T ASSUME what is not provided please. And if after asking for clarification, if the admin still doesn't provide the information, just stick to what was provided. 
                 3. Use create_messaging_draft function to generate a complete draft message
                 3. Present the draft with format(example):
 
@@ -444,6 +444,29 @@ class OpenAIService(BaseAPIService):
                 if hasattr(e, 'response') and hasattr(e.response, 'text'):
                     logger.error(f"Response error: {e.response.text}")
                 raise Exception(f"Invalid assistant ID: {assistant_id}")
+            
+            try:
+                #logger.info(f"Checking for active runs on thread {thread_id}")
+                runs_response = await self.make_request(
+                    method="GET",
+                    url=f"{self.base_url}/threads/{thread_id}/runs",
+                    headers=self.headers,
+                    params={"limit": 1, "order": "desc"}
+                )
+                
+                if runs_response.get("data"):
+                    latest_run = runs_response["data"][0]
+                    run_status = latest_run.get("status")
+                    run_id = latest_run.get("id")
+                    
+                    if run_status in ["queued", "in_progress", "requires_action"]:
+                        logger.warning(f"Active run {run_id} detected (status: {run_status}), waiting 5 seconds...")
+                        await asyncio.sleep(5)  # Wait 10 seconds and try anyway
+                    else:
+                        logger.info(f"Latest run {run_id} has status {run_status}, no wait needed")
+                        
+            except Exception as wait_error:
+                logger.warning(f"Run check failed (continuing anyway): {str(wait_error)}")
 
             # Create the message in the thread
             message_response = await self.make_request(
