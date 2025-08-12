@@ -1214,19 +1214,20 @@ class CampaignService:
     - Cover both current state and improvement suggestions
     - Ensure comprehensive coverage of the research topic
 
-    Return ONLY a JSON array of questions in this format:
+    CRITICAL: Return ONLY a valid JSON array, no markdown formatting, no explanation text:
     [
-    {{
+    {{"text": "question here", "question_type": "open_ended", "follow_up_prompt": "follow up here"}},
+    {{"text": "question here", "question_type": "open_ended", "follow_up_prompt": "follow up here"}}
+    ]
+    
+    Good question examples: 
         "text": "What's one thing about this program that surprised you so far? How does it compare to what you expected when you first signed up?",
         "question_type": "pulse",
         "follow_up_prompt": "How does it compare to what you expected when you first signed up?"
-    }},
-    {{
+
         "text": "Imagine it's 6 months from now and you're telling a colleague about your experience. What's the first story you'd share?",
         "question_type": "open_ended",
         "follow_up_prompt": "Can you give specific examples?"
-    }}
-    ]
 
     Generate 2-3 questions that comprehensively cover: {draft_request.research_topic}"""
 
@@ -1256,7 +1257,20 @@ class CampaignService:
                 # Parse JSON response
                 try:
                     import json
-                    questions_data = json.loads(questions_json)
+                    # Clean up potential markdown formatting (robust fallback)
+                    cleaned_json = questions_json
+                    if cleaned_json.startswith("```json"):
+                        cleaned_json = cleaned_json[7:]  # Remove ```json
+                    elif cleaned_json.startswith("```"):
+                        cleaned_json = cleaned_json[3:]   # Remove ```
+                        
+                    if cleaned_json.endswith("```"):
+                        cleaned_json = cleaned_json[:-3]  # Remove closing ```
+                        
+                    cleaned_json = cleaned_json.strip()
+                    
+                    # Parse the cleaned JSON
+                    questions_data = json.loads(cleaned_json)
                     
                     # Convert to GeneratedQuestion objects
                     generated_questions = []
