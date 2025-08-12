@@ -1169,6 +1169,7 @@ class CampaignService:
 
 
     async def _process_admin_questions( #TODO: this does nothing 
+        self, 
         admin_questions: List[str], 
         conversation_style: str
     ) -> List[GeneratedQuestion]:
