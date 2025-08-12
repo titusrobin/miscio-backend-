@@ -1168,8 +1168,7 @@ class CampaignService:
         return [{"tool_call_id": call["id"], "output": "{}"} for call in tool_calls]
 
 
-    async def _process_admin_questions(
-        self, 
+    async def _process_admin_questions( #TODO: this does nothing 
         admin_questions: List[str], 
         conversation_style: str
     ) -> List[GeneratedQuestion]:
@@ -1201,36 +1200,35 @@ class CampaignService:
         """Generate research questions using OpenAI based on the feedback request"""
         try:
             # Create a question generation prompt
-            prompt = f"""Generate 4-6 comprehensive research questions for gathering student feedback.
+            prompt = f"""Generate 2-3 comprehensive research questions for gathering student feedback.
 
     Research Topic: {draft_request.research_topic}
     Purpose: {draft_request.campaign_purpose}
     Conversation Style: {draft_request.conversation_style}
-    Target Audience: {draft_request.target_audience}
 
     Requirements:
-    - Create questions that will gather actionable insights
-    - Mix question types: ratings with explanations, open-ended, specific examples
-    - Frame questions conversationally (not robotic survey style)
-    - Include follow-up prompts where helpful
+    - Create qualitative research questions that cover the topic comprehensively(insightful/good questions, not just plain and direct)
+    - Mix question types: open-ended, specific examples(Stay away from rating type questions, or your typical survey questions that do no good to anyone)
+    - Frame questions conversationally, that's the way to ask a question, not the survey way, we want to care and support here(not robotic survey style)
+    - Include follow-up prompts ("opinion + why", "examples", etc.)
     - Cover both current state and improvement suggestions
     - Ensure comprehensive coverage of the research topic
 
     Return ONLY a JSON array of questions in this format:
     [
     {{
-        "text": "Rate your overall satisfaction with [topic] from 1-10",
-        "question_type": "rating",
-        "follow_up_prompt": "Please explain your rating"
+        "text": "What's one thing about this program that surprised you so far? How does it compare to what you expected when you first signed up?",
+        "question_type": "pulse",
+        "follow_up_prompt": "How does it compare to what you expected when you first signed up?"
     }},
     {{
-        "text": "What specific aspects of [topic] work well for you?",
+        "text": "Imagine it's 6 months from now and you're telling a colleague about your experience. What's the first story you'd share?",
         "question_type": "open_ended",
         "follow_up_prompt": "Can you give specific examples?"
     }}
     ]
 
-    Generate 4-6 questions that comprehensively cover: {draft_request.research_topic}"""
+    Generate 2-3 questions that comprehensively cover: {draft_request.research_topic}"""
 
             # Use OpenAI Chat Completions API directly
             headers = {
@@ -1245,7 +1243,7 @@ class CampaignService:
                 "temperature": 0.7
             }
             
-            response = await self.openai_service.make_request(
+            response = await self.openai_service.make_request( #TODO: Should this be a reasoning model's task? 
                 method="POST",
                 url="https://api.openai.com/v1/chat/completions",
                 headers=headers,

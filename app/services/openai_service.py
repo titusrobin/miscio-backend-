@@ -401,10 +401,6 @@ class OpenAIService(BaseAPIService):
         2. Run actual execution of assistant's instructions
         """
         logger.warning(f"OpenAI process/message() - Thread: {thread_id}, Assistant: {assistant_id}, Message: {message[:100]}...") 
-        #logger.info(f"Starting to process message in thread {thread_id}")
-        #logger.info(f"Assistant ID: {assistant_id}")
-        #logger.info(f"Run handler provided: {run_handler is not None}")
-        #logger.info(f"Message content: {message[:100]}..." if len(message) > 100 else f"Message content: {message}")
 
         try:
             # Check if assistant_id is valid and log its configuration
@@ -538,7 +534,7 @@ class OpenAIService(BaseAPIService):
                         logger.warning(f"process/message RUN: Received tool calls to process at {retries} and tool calls: {tool_calls}")
                         
                         tool_outputs = await run_handler(tool_calls) # tool_calls is data from OpenAI describing what functions to call and with what parameters
-                        logger.warning(f"process/message RUN: Tool outputs: {tool_outputs}") #TODO: There's a lot of redundancy in this dict returned / token consumption 
+                        logger.warning(f"process/message RUN outputs: Tool outputs: {tool_outputs}") #TODO: There's a lot of redundancy in this dict returned / token consumption 
                         
                         # Submit the tool outputs back to OpenAI
                         await self.make_request(

@@ -228,7 +228,7 @@ async def create_message(
     openai_service: OpenAIService = Depends(get_openai_service),
     campaign_service: CampaignService = Depends(get_campaign_service),
 ):
-    logger.warning(f"i.f POST /threads/{thread_id}/messages - Creating new message in thread")
+    logger.warning(f"i.f POST /threads/messages - Creating new message in thread")
     try:
         #content = message.get("content", "")
         #logger.warning(f"1.f Thread message entry - Admin: {current_admin.id}, Thread: {thread_id}, Content: {content[:100]}...")  # ADD THIS
@@ -457,7 +457,7 @@ async def handle_tool_calls(
             elif function_name == "create_feedback_draft":
                 # Create feedback campaign draft using new workflow
                 try:
-                    #logger.info(f"e2e: Creating feedback draft - Topic: {arguments.get('research_topic', '')[:50]}...")  # ADD THIS
+                    logger.warning(f"handle_tool_calls() - Function: {function_name} - Arguments: {json.dumps(arguments, indent=2)}")
                     
                     # Create FeedbackDraftRequest from arguments
                     draft_request = FeedbackDraftRequest(
@@ -495,7 +495,7 @@ async def handle_tool_calls(
 
                         {question_list}
 
-                        Proceed with these questions?"""
+                        Should we proceed with these questions, or can I improve them in any way?"""
                     
                     tool_outputs.append(
                         {
