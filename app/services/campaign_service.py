@@ -1231,6 +1231,7 @@ class CampaignService:
         conversation_style: str
     ) -> List[GeneratedQuestion]:
         """Process admin-provided questions into structured format"""
+        logger.warning(f"Processing admin questions")
         try:
             processed_questions = []
             
@@ -1256,6 +1257,7 @@ class CampaignService:
         admin_id: str
     ) -> List[GeneratedQuestion]:
         """Generate research questions using OpenAI based on the feedback request"""
+        logger.warning(f"Generating research questions, draft request: {draft_request}")
         try:
             # Create a question generation prompt
             prompt = f"""Generate 2-3 comprehensive research questions for gathering student feedback.

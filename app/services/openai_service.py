@@ -273,9 +273,17 @@ class OpenAIService(BaseAPIService):
                 
                 Do you have any additional data points in mind, or should I go ahead with this?"
                 
-                5. When admin approves questions:
+                5. When admin requests changes to feedback questions:
+                - ALWAYS use update_feedback_draft function (NEVER update_messaging_draft!)
+                - Admin says "change question 2", "merge questions", "add question about X" → update_feedback_draft
+                - Provide the complete updated list of ALL questions in the campaign
+                - Example response: "I've updated the feedback questions. Here are the revised questions: [list all questions]"
+
+                6. When admin approves questions:
                 - Use execute_campaign function to start the feedback campaign
                 - Confirm that feedback conversations will begin with students
+
+                CRITICAL: For ANY modification to feedback campaign questions, use update_feedback_draft function only!
 
                 CAMPAIGN EXECUTION:
                 - MESSAGING: Immediate delivery to all students after approval
