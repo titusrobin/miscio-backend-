@@ -528,6 +528,49 @@ async def handle_tool_calls(
                         }
                     )
 
+            elif function_name == "update_feedback_draft":
+                try:
+                    logger.warning(f"handle_tool_calls() - Function: {function_name} - Arguments: {json.dumps(arguments, indent=2)}")
+                    
+                    campaign_id = arguments.get("campaign_id")
+                    modification_request = arguments.get("modification_request")
+                    updated_questions = arguments.get("updated_questions", [])
+                    
+                    # Call the campaign service method (you'll need to implement this)
+                    result = await campaign_service.update_feedback_draft(
+                        campaign_id=campaign_id,
+                        modification_request=modification_request,
+                        updated_questions=updated_questions,
+                        admin_id=current_admin.id
+                    )
+                    
+                    # Format response for the assistant
+                    response_message = f"Feedback questions updated successfully! Here are the revised questions:\n\n"
+                    for i, q in enumerate(updated_questions, 1):
+                        response_message += f"{i}. {q['text']}\n\n"
+                    response_message += "Should I start the feedback campaign with these questions?"
+                    
+                    tool_outputs.append({
+                        "tool_call_id": tool_call["id"],
+                        "output": json.dumps({
+                            "status": "success",
+                            "message": response_message,
+                            "campaign_id": campaign_id,
+                            "modification_request": modification_request,
+                            "updated_questions": updated_questions
+                        }, default=str)
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error updating feedback draft: {str(e)}")
+                    tool_outputs.append({
+                        "tool_call_id": tool_call["id"],
+                        "output": json.dumps({
+                            "status": "error",
+                            "message": f"Failed to update feedback draft: {str(e)}"
+                        })
+                    })
+
             elif function_name == "query_student_chats":
                 # Keep existing query_student_chats functionality
                 try:

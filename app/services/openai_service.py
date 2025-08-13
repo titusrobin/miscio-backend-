@@ -149,6 +149,40 @@ class OpenAIService(BaseAPIService):
                 {
                     "type": "function",
                     "function": {
+                        "name": "update_feedback_draft",
+                        "description": "Update an existing feedback campaign draft with modified questions",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "campaign_id": {
+                                    "type": "string",
+                                    "description": "ID of the feedback draft to update"
+                                },
+                                "modification_request": {
+                                    "type": "string", 
+                                    "description": "Specific change requested (e.g., 'merge questions 2 and 3', 'add question about X', 'remove question 4')"
+                                },
+                                "updated_questions": {
+                                    "type": "array",
+                                    "description": "The complete updated list of questions with updates as per admin requests",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "text": {"type": "string"},
+                                            "question_type": {"type": "string", "default": "open_ended"},
+                                            "follow_up_prompt": {"type": "string"}
+                                        },
+                                        "required": ["text"]
+                                    }
+                                }
+                            },
+                            "required": ["campaign_id", "modification_request", "updated_questions"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
                         "name": "query_student_chats",
                         "description": "Search through student chat histories",
                         "parameters": {

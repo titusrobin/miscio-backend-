@@ -218,6 +218,63 @@ class CampaignService:
         except Exception as e:
             raise Exception(f"Failed to update draft: {str(e)}")
 
+    
+    async def update_feedback_draft(
+        self,
+        campaign_id: str,
+        modification_request: str,
+        updated_questions: List[Dict],
+        admin_id: str
+    ) -> Dict:
+        """Update an existing feedback draft with modified questions"""
+        logger.warning(f"update_feedback_draft() - Modification request: {modification_request}, Admin ID: {admin_id}")
+        try:
+            # Get existing campaign
+            campaign = await self.db.campaigns.find_one({"_id": ObjectId(campaign_id)})
+            if not campaign or campaign["status"] != "draft" or campaign["type"] != "feedback":
+                raise Exception("Feedback draft not found or not editable")
+            
+            # Convert updated questions to GeneratedQuestion objects
+            questions = []
+            for i, q_data in enumerate(updated_questions):
+                question = GeneratedQuestion(
+                    text=q_data.get("text", ""),
+                    question_type=q_data.get("question_type", "open_ended"),
+                    follow_up_prompt=q_data.get("follow_up_prompt"),
+                    order=i + 1
+                )
+                questions.append(question)
+            
+            # Update the campaign
+            await self.db.campaigns.update_one(
+                {"_id": ObjectId(campaign_id)},
+                {
+                    "$set": {
+                        "questions": [q.dict() for q in questions],
+                        "feedback_metadata.total_questions": len(questions)
+                    },
+                    "$push": {
+                        "approval_history": {
+                            "action": "modified_questions",
+                            "timestamp": datetime.utcnow(),
+                            "admin_id": admin_id,
+                            "modification_request": modification_request,
+                            "notes": f"Questions updated: {modification_request}"
+                        }
+                    }
+                }
+            )
+            
+            return {
+                "status": "success",
+                "message": f"Feedback questions updated: {modification_request}",
+                "campaign_id": campaign_id,
+                "updated_questions": [q.dict() for q in questions]
+            }
+            
+        except Exception as e:
+            raise Exception(f"Failed to update feedback draft: {str(e)}")
+    
     async def approve_and_execute_campaign(
         self,
         approval_request: CampaignApprovalRequest,
