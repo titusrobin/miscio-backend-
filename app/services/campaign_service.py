@@ -676,6 +676,7 @@ class CampaignService:
                     
                     if campaign_type == CampaignType.FEEDBACK.value:
                         # FEEDBACK CAMPAIGN EXECUTION - ENHANCED WITH EMAIL SENDING
+                        logger.warning(f"_approve_and_execute() - Executing feedback campaign: {campaign['_id']}")
                         # logger.info(f"CMP: Executing feedback campaign: {campaign['_id']}")
 
                         # Generate dynamic initial conversation starter message
@@ -728,7 +729,7 @@ class CampaignService:
                             session=session
                         ).to_list(length=None)
                         
-                        # logger.info(f"Executing feedback campaign for {len(students)} students")
+                        logger.warning(f"_approve_and_execute() - Executing feedback campaign for {len(students)} students")
                         
 
                         # Send initial emails to start conversations
@@ -1257,7 +1258,7 @@ class CampaignService:
         admin_id: str
     ) -> List[GeneratedQuestion]:
         """Generate research questions using OpenAI based on the feedback request"""
-        logger.warning(f"Generating research questions, draft request: {draft_request}")
+        logger.warning(f"Generating research questions(), draft request: {draft_request}")
         try:
             # Create a question generation prompt
             prompt = f"""Generate 2-3 comprehensive research questions for gathering student feedback.
@@ -1456,6 +1457,7 @@ class CampaignService:
         target_audience: str
     ) -> str:
         """Generate the initial conversation starter message for feedback campaigns"""
+        logger.warning(f"_generate_feedback_initial_message() - Generating initial message for feedback campaign: {campaign_purpose}, research topic: {research_topic}, conversation style: {conversation_style}, target audience: {target_audience}")
         try:
             prompt = f"""Create a warm, conversational email to start a feedback conversation with students.
 
@@ -1472,6 +1474,10 @@ class CampaignService:
     - Make it feel like a genuine check-in from someone who cares
     - Use the specified conversation style
     - End with an encouraging note about responding
+    - DO NOT use "Dear Students" or "Hi everyone" or any greetings, just the message body 
+    - DO NOT include any signature, sign-off, or placeholder names like [Your Name/Team]
+    - End naturally without formal closings
+    - DO NOT MAKE UP ANY INFORMATION -- DON'T ASSUME what is not provided please. 
 
     Return only the message content, no subject line or signature."""
 
@@ -1499,7 +1505,7 @@ class CampaignService:
                 # logger.info(f"Generated feedback initial message")
                 return message
             else:
-                return self._generate_fallback_feedback_message(campaign_purpose, research_topic, conversation_style)
+                return self._generate_fallback_feedback_message(campaign_purpose, research_topic, conversation_style) #TODO: this function is not defined yet
                 
         except Exception as e:
             logger.error(f"Error generating feedback initial message: {str(e)}")
