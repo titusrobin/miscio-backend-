@@ -24,7 +24,7 @@ class FeedbackConversationService:
     ) -> FeedbackConversationState:
         """Initialize conversation state for a student starting a feedback campaign"""
         try:
-            #logger.info(f"CMP: Feedback conversation init - Student: {student_id}, Campaign: {campaign_id}")  # ADD THIS
+            logger.warning(f"initialize_conversation() - Initializing conversation for student: {student_id}, campaign: {campaign_id}")
 
             # Get campaign questions
             campaign = await self.db.campaigns.find_one({"_id": ObjectId(campaign_id)})
@@ -63,8 +63,7 @@ class FeedbackConversationService:
             
             # Save to database
             await self.db.feedback_conversations.insert_one(conversation_state.dict())
-            
-            # logger.info(f"Initialized feedback conversation for student {student_id}, campaign {campaign_id}")
+            logger.warning(f"initialize_conversation() - Conversation initialized in db for student: {student_id}, campaign: {campaign_id}")
             return conversation_state
             
         except Exception as e:
@@ -77,6 +76,7 @@ class FeedbackConversationService:
         campaign_id: str
     ) -> Optional[FeedbackConversationState]:
         """Get current conversation state for a student"""
+        logger.warning(f"get_conversation_state() - Getting conversation state for student: {student_id}, campaign: {campaign_id}")
         try:
             state_doc = await self.db.feedback_conversations.find_one({
                 "student_id": student_id,
@@ -97,6 +97,7 @@ class FeedbackConversationService:
         conversation_state: FeedbackConversationState
     ) -> ResponseAnalysis:
         """Analyze student response to determine which questions were addressed"""
+        logger.warning(f"analyze_student_response() - Analyzing student response: {response}, campaign: {conversation_state.campaign_id}")
         try:
             # Get unanswered questions for context
             unanswered_questions = [
@@ -167,6 +168,7 @@ Guidelines:
                 try:
                     import json
                     analysis_data = json.loads(analysis_text)
+                    logger.warning(f"analyze_student_response() - AI analysis: {analysis_data}")
                     
                     return ResponseAnalysis(
                         questions_addressed=[str(q) for q in analysis_data.get("questions_addressed", [])],
@@ -213,6 +215,7 @@ Guidelines:
         student_response: str
     ) -> FeedbackConversationState:
         """Update conversation state based on response analysis"""
+        logger.warning(f"update_conversation_state() - Updating conversation state for student: {conversation_state.student_id}, campaign: {conversation_state.campaign_id}")
         try:
             # Update question progress
             for question_id in response_analysis.questions_addressed:
@@ -278,7 +281,7 @@ Guidelines:
     ) -> str:
         """Generate context-aware prompt for the assistant based on conversation state"""
         try:
-            # logger.info(f"CMP: Generating feedback prompt - Student: {student_name}, Progress: {conversation_state.questions_completed}/{conversation_state.total_questions}")  # ADD THIS
+            logger.warning(f"generate_assistant_prompt() - Generating assistant prompt for student: {student_name}, campaign: {conversation_state.campaign_id}")
 
             # Get campaign context
             campaign = await self.db.campaigns.find_one({"_id": ObjectId(conversation_state.campaign_id)})

@@ -139,34 +139,28 @@ async def handle_email_webhook(
     """
     start_time = datetime.utcnow()
     request_id = str(uuid.uuid4())[:8]  # Generate a short request ID for tracking this request in logs
-    # logger.info(f"CMP: Student email webhook - Request: {request_id}")  # ADD THIS
-    #logger.info(f"[REQ-{request_id}] Email webhook received at: {start_time}")
+    logger.warning(f"handle_email_webhook() Email webhook received -  [REQ-{request_id}] ")
     try:
         # Parse the incoming SendGrid webhook form data with detailed logging
         body = await request.body()
         body_size = len(body)
-        #logger.info(f"[REQ-{request_id}] Received email webhook raw body length: {body_size}")
         
         # Log headers for troubleshooting
         headers = dict(request.headers)
         sanitized_headers = {k: v for k, v in headers.items() 
                            if k.lower() not in ('authorization', 'cookie')}  # Remove sensitive headers
-        #logger.info(f"[REQ-{request_id}] Request headers: {json.dumps(sanitized_headers)}")
         
         # Parse form data with expanded logging
         form_data = await request.form()
         form_keys = list(form_data.keys())
-        #logger.info(f"[REQ-{request_id}] Parsed form data keys: {form_keys}")
+        logger.warning(f"handle_email_webhook() - Form data: {form_data}")
         
         from_email = form_data.get("from")
         subject = form_data.get("subject", "")
         text_content = form_data.get("text", "")
         
-        #logger.info(f"[REQ-{request_id}] Extracted email details - From: {from_email}, Subject: {subject}")
-
         # Log message size
         text_length = len(text_content) if text_content else 0
-        #logger.info(f"[REQ-{request_id}] Text content length: {text_length}")
         
         # Enhanced fallback logging for email field extraction
         if not from_email and "envelope" in form_data:
@@ -180,11 +174,8 @@ async def handle_email_webhook(
                 logger.error(f"[REQ-{request_id}] Failed to parse envelope JSON: {str(e)}")
                 logger.error(f"[REQ-{request_id}] Raw envelope content: {form_data.get('envelope', 'N/A')}")
         
-        # logger.info(f"CMP: Email parsed - From: {from_email}, Subject: {subject[:50]}...")  # ADD THIS
-
         if not text_content: # if no text content, use alternate content source
             alt_content = form_data.get("body-plain", "") or form_data.get("plain", "")
-            #logger.info(f"Using alternate content source - length: {len(alt_content) if alt_content else 0}")
             text_content = alt_content
          
         if not from_email or not text_content: # Log all available fields for debugging
@@ -236,11 +227,7 @@ async def handle_email_webhook(
         campaign_desc = campaign.get("description", "No description")
         campaign_assistant_id = campaign.get("assistant_id", "None")
         campaign_type = campaign.get("type", "messaging")
-        # logger.info(f"CMP: Student found - ID: {student_id}, Name: {student_name}, Campaign: {campaign_id}")  # ADD THIS
-
-        #logger.info(f"[REQ-{request_id}] Found active campaign: {campaign_desc[:50]}...")
-        #logger.info(f"[REQ-{request_id}] Campaign ID: {campaign_id}, Type: {campaign_type}")
-        #logger.info(f"[REQ-{request_id}] Campaign assistant_id: {campaign_assistant_id}")
+        logger.warning(f"handle_email_webhook() - Campaign details: {campaign_id}")
 
         # Get admin associated with the campaign
         admin_id = campaign.get("admin_id")
@@ -277,8 +264,7 @@ async def handle_email_webhook(
         
         # Get assistant ID with proper fallbacks
         assistant_id = campaign.get("assistant_id") or admin.get("assistant_id") or "asst_re59LKPfW1Fya4rwuoxVHKOa"
-        # logger.info(f"Using assistant ID: {assistant_id}")
-        # logger.info(f"Message content (first 100 chars): {text_content[:100] if text_content else ''}")
+        logger.warning(f"handle_email_webhook() - Assistant ID: {assistant_id}")
         
         # If vector store exists, attach it to the thread for this run
         thread_tool_resources = None
@@ -302,9 +288,7 @@ async def handle_email_webhook(
         # FEEDBACK CAMPAIGN HANDLING - NEW LOGIC
         # ================================================================
         if campaign_type == "feedback":
-            # logger.info(f"CMP: Processing feedback response - Student: {student_id}, Campaign: {campaign_id}")  # ADD THIS
-
-            #logger.info(f"[REQ-{request_id}] Processing feedback campaign interaction")
+            logger.warning(f"handle_email_webhook() - Feedback campaign detected")
             
             # Get feedback conversation service
             feedback_service = FeedbackConversationService(db.db, openai_service)
@@ -315,7 +299,7 @@ async def handle_email_webhook(
                 campaign_id=campaign_id
             )
             
-            # logger.info(f"CMP: Conversation state: {conversation_state}")  # ADD THIS
+            logger.warning(f"handle_email_webhook() - Conversation state: {conversation_state}")
             
             if not conversation_state:
                 # logger.info(f"CMP: [REQ-{request_id}] Initializing new feedback conversation")
@@ -324,8 +308,8 @@ async def handle_email_webhook(
                     campaign_id=campaign_id
                 )
             else:
-                # logger.info(f"CMP: [REQ-{request_id}] Resuming feedback conversation - {conversation_state.questions_completed}/{conversation_state.total_questions} questions completed")
-                pass # Commented out logging
+                logger.warning(f"handle_email_webhook() - Conversation state found")
+                pass 
             
             # Generate context-aware prompt for feedback conversation
             assistant_prompt = await feedback_service.generate_assistant_prompt(
@@ -333,15 +317,13 @@ async def handle_email_webhook(
                 student_message=text_content,
                 student_name=student_name
             )
-            
-            # logger.info(f"CMP: [REQ-{request_id}] Generated feedback conversation prompt")
-            
+
             # NEW: Add minimal additional instructions
             feedback_metadata = campaign.get("feedback_metadata", {})
+            #TODO: is this redundant?
             student_additional_instructions = f"STUDENT MODE: Speaking with {student_name} about {feedback_metadata.get('research_topic', 'feedback')}. Style: {feedback_metadata.get('conversation_style', 'friendly')}."
 
-            # logger.info(f"CMP: Calling OpenAI - Thread: {thread_id}, Assistant: {assistant_id}, Student mode: {bool('STUDENT' in student_additional_instructions)}")  # ADD THIS
-
+            logger.warning(f"handle_email_webhook() - calling openai with prompt: {assistant_prompt}, student_additional_instructions: {student_additional_instructions}, thread_id: {thread_id}, assistant_id: {assistant_id}")
             # Process with OpenAI using feedback-specific prompt
             try:
                 response = await openai_service.process_message(
@@ -389,8 +371,7 @@ async def handle_email_webhook(
         # MESSAGING CAMPAIGN HANDLING - EXISTING LOGIC
         # ================================================================
         else:
-            # logger.info(f"CMP: Processing messaging response - Student: {student_id}, Campaign: {campaign_id}")  # ADD THIS
-            #logger.info(f"[REQ-{request_id}] Processing messaging campaign interaction")
+            logger.warning(f"handle_email_webhook() - Messaging campaign detected")
             
             try:
                 # Process message with OpenAI (original logic)
