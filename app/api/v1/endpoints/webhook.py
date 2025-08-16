@@ -208,13 +208,35 @@ async def handle_email_webhook(
         
         # Updated campaign query to handle new status system
         campaign = await db.db.campaigns.find_one({
+            "admin_id": str(student["admin_id"]),
             "$or": [
-                # New system: look for executing or completed campaigns
-                {"admin_id": str(student["admin_id"]), "status": {"$in": ["executing", "completed"]}},
-                # Legacy system: look for active campaigns
-                {"admin_id": str(student["admin_id"]), "status": "active"}
+                {"status": {"$in": ["executing", "completed"]}},
+                {"status": "active"}  # Legacy support
             ]
-        }, sort=[("created_at", -1)])  # Get most recent campaign
+        }, sort=[("created_at", -1)])
+
+        if campaign:
+            logger.warning(f"Found campaign: ID={str(campaign['_id'])}, status={campaign.get('status')}, type={campaign.get('type')}, created_at={campaign.get('created_at')}")
+        else:
+            logger.error("No active campaign found!")
+
+            # Debug: Show all campaigns for this admin
+        all_campaigns = await db.db.campaigns.find({"admin_id": str(student["admin_id"])}).to_list(length=None)
+        logger.error(f"All campaigns for admin {student['admin_id']}: {[(str(c['_id']), c.get('status'), c.get('type'), c.get('created_at')) for c in all_campaigns]}")
+        
+        # Try to find ANY campaign for this admin (including draft status)
+        any_campaign = await db.db.campaigns.find_one({
+            "admin_id": str(student["admin_id"])
+        }, sort=[("created_at", -1)])
+        
+        if any_campaign:
+            logger.warning(f"Found DRAFT campaign, using it: ID={str(any_campaign['_id'])}, status={any_campaign.get('status')}")
+            campaign = any_campaign
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail="No campaign found for this admin"
+            )
         
         if not campaign:
             logger.warning("No active campaign found")
@@ -227,11 +249,12 @@ async def handle_email_webhook(
         campaign_desc = campaign.get("description", "No description")
         campaign_assistant_id = campaign.get("assistant_id", "None")
         campaign_type = campaign.get("type", "messaging")
-        logger.warning(f"handle_email_webhook() - Campaign details: {campaign_id}")
+        logger.warning(f"handle_email_webhook() - Campaign details: {campaign_id}, {campaign_desc}, {campaign_assistant_id}, {campaign_type}")
 
         # Get admin associated with the campaign
         admin_id = campaign.get("admin_id")
         admin = await db.db.admin_users.find_one({"_id": ObjectId(admin_id)})
+        logger.warning(f"handle_email_webhook() - Admin details: {admin_id}")
         
         if not admin:
             logger.error(f"Admin not found for campaign {campaign.get('_id')}")
