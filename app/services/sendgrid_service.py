@@ -3,7 +3,7 @@ import logging
 import re  # Add this import
 from typing import Optional
 from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, Content
+from sendgrid.helpers.mail import Mail, Email, Content, Header
 from app.core.config import settings
 import time
 logger = logging.getLogger(__name__)
@@ -52,13 +52,13 @@ class SendGridService:
             # Generate a unique Message-ID for this email
             current_message_id = f"<{int(time.time())}.{to_email.replace('@', '.')}@{self.from_email.split('@')[1]}>"
             
-            # Add custom headers for email threading
-            mail.add_header("Message-ID", current_message_id)
+            # CORRECTED: Use Header objects in a list - this is the most compatible approach
+            headers = [Header("Message-ID", current_message_id)]
             
             # If this is a reply, add threading headers
             if message_type == "reply" and original_message_id:
                 # In-Reply-To points to the message we're replying to
-                mail.add_header("In-Reply-To", original_message_id)
+                headers.append(Header("In-Reply-To", original_message_id))
                 
                 # References contains the chain of message IDs
                 if thread_references:
@@ -68,7 +68,10 @@ class SendGridService:
                     # First reply in thread
                     references = original_message_id
                     
-                mail.add_header("References", references)
+                headers.append(Header("References", references))
+            
+            # Set headers on the mail object
+            mail.headers = headers
             
             # Set the Reply-To header to reply@miscioapp.com
             mail.reply_to = Email("robin@em1650.miscioapp.com", "Robin Titus")
