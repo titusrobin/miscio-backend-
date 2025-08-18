@@ -158,6 +158,27 @@ async def handle_email_webhook(
         from_email = form_data.get("from")
         subject = form_data.get("subject", "")
         text_content = form_data.get("text", "")
+
+        # NEW: Capture email threading headers from incoming email
+        headers_raw = form_data.get("headers", "")
+        message_id = None
+        references = None
+        
+        # Parse headers to extract Message-ID and References
+        if headers_raw:
+            # Headers come as a string, parse them
+            for line in headers_raw.split('\n'):
+                if line.startswith("Message-ID:"):
+                    message_id = line.replace("Message-ID:", "").strip()
+                elif line.startswith("References:"):
+                    references = line.replace("References:", "").strip()
+        
+        # Alternative: Check if SendGrid provides these in a different format
+        if not message_id:
+            # Some webhook providers put it directly in form data
+            message_id = form_data.get("message-id") or form_data.get("Message-ID")
+        
+        logger.warning(f"handle_email_webhook() - Incoming email Message-ID: {message_id}, References: {references}")
         
         # Log message size
         text_length = len(text_content) if text_content else 0
@@ -380,7 +401,9 @@ async def handle_email_webhook(
                     to_email=email_address,
                     subject=format_reply_subject(subject),
                     message=response,
-                    message_type="reply"
+                    message_type="reply",
+                    original_message_id=message_id,
+                    thread_references=references
                 )
                 
             except Exception as e:
@@ -413,7 +436,9 @@ async def handle_email_webhook(
                     to_email=email_address,
                     subject=format_reply_subject(subject),
                     message=response,
-                    message_type="reply"
+                    message_type="reply",
+                    original_message_id=message_id,
+                    thread_references=references
                 )
                 
             except Exception as e:
@@ -437,7 +462,9 @@ async def handle_email_webhook(
             "status": "sent",
             "timestamp": datetime.utcnow(),
             "vector_store_used": bool(vector_store_id),
-            "campaign_type": campaign_type
+            "campaign_type": campaign_type,
+            "original_message_id": message_id,
+            "thread_references": references
         }
         
         # Add feedback-specific fields if it's a feedback campaign
