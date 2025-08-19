@@ -3,7 +3,7 @@ import logging
 import re  # Add this import
 from typing import Optional
 from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, Content, Header
+from sendgrid.helpers.mail import Mail, Email, Content, Header, Personalization
 from app.core.config import settings
 import time
 logger = logging.getLogger(__name__)
@@ -48,17 +48,20 @@ class SendGridService:
                 plain_text_content=message_plain  # Use the cleaned message
             )
 
-            # CRITICAL FIX: Add email threading headers for Outlook
+            # CORRECT APPROACH: Add headers through Personalization
             # Generate a unique Message-ID for this email
             current_message_id = f"<{int(time.time())}.{to_email.replace('@', '.')}@{self.from_email.split('@')[1]}>"
             
-            # CORRECTED: Use Header objects in a list - this is the most compatible approach
-            headers = [Header("Message-ID", current_message_id)]
+            # Get the personalization object (Mail constructor creates one automatically)
+            personalization = mail.personalizations[0]
+            
+            # Add Message-ID header
+            personalization.add_header(Header("Message-ID", current_message_id))
             
             # If this is a reply, add threading headers
             if message_type == "reply" and original_message_id:
                 # In-Reply-To points to the message we're replying to
-                headers.append(Header("In-Reply-To", original_message_id))
+                personalization.add_header(Header("In-Reply-To", original_message_id))
                 
                 # References contains the chain of message IDs
                 if thread_references:
@@ -68,10 +71,7 @@ class SendGridService:
                     # First reply in thread
                     references = original_message_id
                     
-                headers.append(Header("References", references))
-            
-            # Set headers on the mail object
-            mail.headers = headers
+                personalization.add_header(Header("References", references))
             
             # Set the Reply-To header to reply@miscioapp.com
             mail.reply_to = Email("robin@em1650.miscioapp.com", "Robin Titus")
