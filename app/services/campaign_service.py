@@ -1477,19 +1477,16 @@ class CampaignService:
             prompt = f"""Create a warm, conversational email to start a feedback conversation with students.
 
     Campaign Purpose: {campaign_purpose}
-    Research Topic: {research_topic}
     Conversation Style: {conversation_style}
     Target Audience: {target_audience}
     First Question: {first_question if first_question else "Use research topic as a starting point"}
     
     Requirements:
-    - Keep it warm and conversational (2 paragraphs max)
     - Don't mention "survey" or make it feel formal
-    - Our goal is to revolutionize the way we gather feedback from students, and so you're reaching out like a human would: asking one question as a conversation, not a survey that just dumps all questions on a student 
+    - Our goal is to revolutionize the way we gather feedback from students, and so you're reaching out like a human would: asking one question at a time as a conversation, not a survey that just dumps all questions on a student 
     - Explain that you'd love to chat and hear their thoughts
     - Let them know they can just reply to this email/End with an encouraging note about responding
     - Make it feel like a genuine check-in from someone who cares
-    - Use the specified conversation style
     - DO NOT use "Dear Students" or "Hi everyone" or any greetings, just the message body 
     - DO NOT include any signature, sign-off, or placeholder names like [Your Name/Team]
     - End naturally without formal closings
@@ -1518,7 +1515,7 @@ class CampaignService:
             
             if response and "choices" in response and len(response["choices"]) > 0:
                 message = response["choices"][0]["message"]["content"].strip()
-                # logger.info(f"Generated feedback initial message")
+                logger.warning(f"_generate_feedback_initial_message() - Generated feedback initial message: {message}")
                 return message
             else:
                 return self._generate_fallback_feedback_message(campaign_purpose, research_topic, conversation_style) #TODO: this function is not defined yet

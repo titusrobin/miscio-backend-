@@ -669,22 +669,41 @@ async def handle_tool_calls(
                     successful_messages = execution_summary.get("successful_messages", 0)
                     failed_messages = execution_summary.get("failed_messages", 0)
                     
-                    # Format success response
-                    response_message = f"Campaign executed successfully! "
-                    response_message += f"Sent to {successful_messages} students"
+                    if total_students == 0:
+                        status = "warning"
+                        response_message = "⚠️ Campaign completed, but no students were found to send to."
+                    elif failed_messages == 0:
+                        status = "success"
+                        response_message = f"✅ Campaign executed successfully! Sent to all {successful_messages} students."
+                    elif successful_messages == 0:
+                        status = "error" 
+                        response_message = f"❌ Campaign failed! Unable to send to any students. {failed_messages} out of {total_students} failed."
+                    elif failed_messages > 0:
+                        status = "partial_success"
+                        failure_rate = (failed_messages / total_students) * 100
+                        response_message = f"⚠️ Campaign partially completed. Sent to {successful_messages} students, but {failed_messages} failed ({failure_rate:.0f}% failure rate)."
+                    else:
+                        status = "success"
+                        response_message = f"Campaign executed! Sent to {successful_messages} students out of {total_students} total."
+                    
+                    # Add technical details for debugging if there were failures
                     if failed_messages > 0:
-                        response_message += f" ({failed_messages} failed)"
-                    response_message += f" out of {total_students} total students."
+                        response_message += f"\n\n🔧 Technical details: There may be issues with email delivery. Check the server logs for specific error details."
                     
                     tool_outputs.append(
                         {
                             "tool_call_id": tool_call["id"],
                             "output": json.dumps(
                                 {
-                                    "status": "success",
+                                    "status": status,
                                     "message": response_message,
                                     "campaign_id": campaign_id,
-                                    "execution_summary": execution_summary
+                                    "execution_summary": execution_summary,
+                                    "success_rate": f"{((successful_messages / total_students) * 100):.0f}%" if total_students > 0 else "0%",
+                                    "failure_details": {
+                                        "total_failures": failed_messages,
+                                        "failure_rate": f"{((failed_messages / total_students) * 100):.0f}%" if total_students > 0 else "0%"
+                                    } if failed_messages > 0 else None
                                 },
                                 default=str  # Handle datetime serialization
                             ),
