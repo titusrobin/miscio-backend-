@@ -153,7 +153,7 @@ async def handle_email_webhook(
         # Parse form data with expanded logging
         form_data = await request.form()
         form_keys = list(form_data.keys())
-        logger.warning(f"handle_email_webhook() - Form data: {form_data}")
+        #logger.warning(f"handle_email_webhook() - Form data: {form_data}")
         
         from_email = form_data.get("from")
         subject = form_data.get("subject", "")
@@ -240,24 +240,6 @@ async def handle_email_webhook(
             logger.warning(f"Found campaign: ID={str(campaign['_id'])}, status={campaign.get('status')}, type={campaign.get('type')}, created_at={campaign.get('created_at')}")
         else:
             logger.error("No active campaign found!")
-
-            # Debug: Show all campaigns for this admin
-        all_campaigns = await db.db.campaigns.find({"admin_id": str(student["admin_id"])}).to_list(length=None)
-        logger.error(f"All campaigns for admin {student['admin_id']}: {[(str(c['_id']), c.get('status'), c.get('type'), c.get('created_at')) for c in all_campaigns]}")
-        
-        # Try to find ANY campaign for this admin (including draft status)
-        any_campaign = await db.db.campaigns.find_one({
-            "admin_id": str(student["admin_id"])
-        }, sort=[("created_at", -1)])
-        
-        if any_campaign:
-            logger.warning(f"Found DRAFT campaign, using it: ID={str(any_campaign['_id'])}, status={any_campaign.get('status')}")
-            campaign = any_campaign
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, 
-                detail="No campaign found for this admin"
-            )
         
         if not campaign:
             logger.warning("No active campaign found")
